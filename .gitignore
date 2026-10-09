@@ -23,6 +23,16 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Project-specific exclusions: generated/default/sample content not needed by the scenes.
+/Documentation/
+/Assets/HDRPDefaultResources/
+/Assets/HDRPDefaultResources.meta
+/Assets/Terrain/
+/Assets/Terrain.meta
+/Assets/TerrainSampleAssets/
+/Assets/TerrainSampleAssets.meta
+/ProjectSettings/SceneTemplateSettings.json
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta

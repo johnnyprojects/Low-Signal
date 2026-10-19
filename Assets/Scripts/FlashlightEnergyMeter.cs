@@ -2,14 +2,14 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Attach to the Player alongside Flashlight. Builds a screen-space energy bar at runtime
-/// showing the flashlight's remaining charge.
+/// Attach to the Player alongside PlayerEnergy. Builds a screen-space energy bar at runtime
+/// showing the player's shared energy.
 /// </summary>
 [DisallowMultipleComponent]
 public class FlashlightEnergyMeter : MonoBehaviour
 {
     [Tooltip("Found on this object, or anywhere in the scene, when left empty.")]
-    [SerializeField] private Flashlight flashlight;
+    [SerializeField] private PlayerEnergy energySource;
 
     [Header("Layout")]
     [SerializeField] private Vector2 screenOffset = new Vector2(40f, 40f);
@@ -31,23 +31,25 @@ public class FlashlightEnergyMeter : MonoBehaviour
 
     private void Awake()
     {
-        if (flashlight == null)
-            flashlight = GetComponent<Flashlight>();
-        if (flashlight == null)
-            flashlight = FindAnyObjectByType<Flashlight>();
-        if (flashlight == null)
+        if (energySource == null)
+            energySource = GetComponent<PlayerEnergy>();
+        if (energySource == null)
+            energySource = FindAnyObjectByType<PlayerEnergy>();
+        if (energySource == null)
         {
-            Debug.LogError("FlashlightEnergyMeter could not find a Flashlight.", this);
+            Debug.LogError("FlashlightEnergyMeter could not find PlayerEnergy.", this);
             enabled = false;
             return;
         }
 
-        BuildUI();
+        // The active HUD is RobotHUD. This legacy meter is intentionally disabled so
+        // it cannot create the duplicate bottom-left energy bar.
+        enabled = false;
     }
 
     private void LateUpdate()
     {
-        float energy = flashlight.Energy01;
+        float energy = energySource.Energy01;
         // Scale the fill by its anchors so no sprite is needed.
         fill.anchorMax = new Vector2(energy, 1f);
         fillImage.color = energy < lowThreshold

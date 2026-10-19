@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Attach to the Player. Builds the robot HUD at runtime from the Figma design
-/// ("Underwater Robot · HUD"): an energy meter for the flashlight's charge (top-left)
+/// ("Underwater Robot · HUD"): an energy meter for the player's shared energy (top-left)
 /// and a Walk/Swim mode indicator with a hold-Space hint (bottom-center).
 /// Fonts and icons are loaded from Assets/Resources/RobotHUD; panel shapes are generated.
 /// </summary>
@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class RobotHUD : MonoBehaviour
 {
     [Tooltip("Found on this object, or anywhere in the scene, when left empty.")]
-    [SerializeField] private Flashlight flashlight;
+    [SerializeField] private PlayerEnergy energySource;
     [Tooltip("Found on this object, or anywhere in the scene, when left empty.")]
     [SerializeField] private UnderwaterSwimController swimController;
 
@@ -26,6 +26,7 @@ public class RobotHUD : MonoBehaviour
     [SerializeField] private Vector2 referenceResolution = new Vector2(1280f, 720f);
     [SerializeField, Min(0f)] private float screenMargin = 32f;
     [SerializeField, Min(1f)] private float modeSwitchSpeed = 12f;
+    [SerializeField, Min(0.01f)] private float energyFadeSeconds = 0.3f;
 
     private static readonly Color Glass = new Color(0.02f, 0.09f, 0.13f, 0.82f);
     private static readonly Color Cyan = new Color(0.15f, 0.88f, 1f);
@@ -36,11 +37,9 @@ public class RobotHUD : MonoBehaviour
     private static readonly Color Ice = new Color(0.9f, 0.98f, 1f);
     private static readonly Color KeyShadow = new Color(0.05f, 0.45f, 0.6f);
 
-    private const int CellCount = 10;
-    private const float GlowSize = 16f;
-    private const float EnergyWidth = 272f;
-    private const float EnergyHeight = 68f;
-    private const float EnergyWarningHeight = 82f;
+    private const float GlowSize = 8f;
+    private const float EnergyWidth = 320f;
+    private const float EnergyHeight = 24f;
 
     private GameObject canvasObject;
     private Font headingFont;
@@ -48,17 +47,12 @@ public class RobotHUD : MonoBehaviour
     private Font semiBoldFont;
 
     private RectTransform energyPanel;
-    private Image energyGlow;
+    private CanvasGroup energyCanvasGroup;
     private Image energyOutline;
-    private Image badgeFill;
-    private Image badgeOutline;
-    private Image badgeIcon;
+    private Image energyFill;
     private Text percentText;
     private Text warningText;
-    private readonly Image[] cells = new Image[CellCount];
-    private Image cellGlow;
     private int shownPercent = -1;
-    private int shownCells = -1;
     private Color shownColor;
 
     private RectTransform modePanel;
@@ -72,10 +66,10 @@ public class RobotHUD : MonoBehaviour
 
     private void Awake()
     {
-        if (flashlight == null)
-            flashlight = GetComponent<Flashlight>();
-        if (flashlight == null)
-            flashlight = FindAnyObjectByType<Flashlight>();
+        if (energySource == null)
+            energySource = GetComponent<PlayerEnergy>();
+        if (energySource == null)
+            energySource = FindAnyObjectByType<PlayerEnergy>();
         if (swimController == null)
             swimController = GetComponent<UnderwaterSwimController>();
         if (swimController == null)
@@ -87,7 +81,7 @@ public class RobotHUD : MonoBehaviour
 
         BuildCanvas();
         // Each widget is skipped when the script it reports on is missing.
-        if (flashlight != null)
+        if (energySource != null)
             BuildEnergyMeter();
         if (swimController != null)
             BuildModeToggle();
@@ -111,34 +105,31 @@ public class RobotHUD : MonoBehaviour
 
     private void UpdateEnergyMeter()
     {
-        float energy = flashlight.Energy01;
+        float energy = energySource.Energy01;
+        bool shouldShow = energy < 1f;
+        if (shouldShow && !energyPanel.gameObject.activeSelf)
+            energyPanel.gameObject.SetActive(true);
+
+        float targetAlpha = shouldShow ? 0.8f : 0f;
+        energyCanvasGroup.alpha = Mathf.MoveTowards(energyCanvasGroup.alpha, targetAlpha,
+            0.8f * Time.unscaledDeltaTime / Mathf.Max(0.01f, energyFadeSeconds));
+        if (!shouldShow && energyCanvasGroup.alpha <= 0f)
+            energyPanel.gameObject.SetActive(false);
+        if (!energyPanel.gameObject.activeSelf)
+            return;
+
         bool critical = energy <= criticalThreshold;
         Color accent = critical ? Red : energy <= lowThreshold ? Amber : Cyan;
-        int litCells = Mathf.Clamp(Mathf.CeilToInt(energy * CellCount), 0, CellCount);
+        energyFill.rectTransform.anchorMax = new Vector2(energy, 1f);
 
-        if (accent != shownColor || litCells != shownCells)
+        if (accent != shownColor)
         {
             shownColor = accent;
-            shownCells = litCells;
-            energyGlow.color = WithAlpha(accent, 0.3f);
             energyOutline.color = WithAlpha(accent, 0.55f);
-            badgeFill.color = WithAlpha(accent, 0.14f);
-            badgeOutline.color = WithAlpha(accent, 0.6f);
-            badgeIcon.color = accent;
             percentText.color = warningText.color = accent;
-            for (int i = 0; i < CellCount; i++)
-                cells[i].color = i < litCells ? accent : WithAlpha(Dim, 0.16f);
-
-            // The newest lit cell glows, like the leading edge of the charge.
-            cellGlow.enabled = litCells > 0;
-            if (litCells > 0)
-            {
-                cellGlow.color = WithAlpha(accent, 0.8f);
-                cellGlow.rectTransform.SetParent(cells[litCells - 1].rectTransform, false);
-            }
+            energyFill.color = accent;
 
             warningText.enabled = critical;
-            energyPanel.sizeDelta = new Vector2(EnergyWidth, critical ? EnergyWarningHeight : EnergyHeight);
         }
 
         if (critical)
@@ -159,32 +150,26 @@ public class RobotHUD : MonoBehaviour
     private void BuildEnergyMeter()
     {
         energyPanel = CreateRect("Energy Meter", canvasObject.transform);
-        energyPanel.anchorMin = energyPanel.anchorMax = energyPanel.pivot = new Vector2(0f, 1f);
-        energyPanel.anchoredPosition = new Vector2(screenMargin, -screenMargin);
+        energyPanel.anchorMin = energyPanel.anchorMax = energyPanel.pivot = new Vector2(0.5f, 1f);
+        energyPanel.anchoredPosition = new Vector2(0f, -screenMargin);
         energyPanel.sizeDelta = new Vector2(EnergyWidth, EnergyHeight);
-        BuildGlassPanel(energyPanel, 12, out energyGlow, out energyOutline);
+        energyCanvasGroup = energyPanel.gameObject.AddComponent<CanvasGroup>();
+        energyCanvasGroup.alpha = 0f;
+        // Center the track itself, with equal insets and no generated glow.
+        AddImage(Stretch(CreateRect("Glass", energyPanel)), RoundedSprite(2, 0f)).color = WithAlpha(Glass, 0.55f);
+        energyOutline = AddImage(Stretch(CreateRect("Outline", energyPanel)), RoundedSprite(2, 1f));
+        AddText(Place(CreateRect("Label", energyPanel), 5f, 27f, 62f, 16f), headingFont, 8, "ENERGY", Dim, TextAnchor.MiddleLeft);
+        percentText = AddText(Place(CreateRect("Percent", energyPanel), EnergyWidth - 51f, 27f, 46f, 16f), boldFont, 10, "100%", Cyan, TextAnchor.MiddleRight);
 
-        RectTransform badge = Place(CreateRect("Badge", energyPanel), 14f, 14f, 40f, 40f);
-        badgeFill = AddImage(Stretch(CreateRect("Fill", badge)), CircleSprite(40, 0f));
-        badgeOutline = AddImage(Stretch(CreateRect("Outline", badge)), CircleSprite(40, 1.5f));
-        badgeIcon = AddImage(Place(CreateRect("Icon", badge), 9f, 9f, 22f, 22f), LoadIcon("bolt"));
+        RectTransform barTrack = Place(CreateRect("Bar Track", energyPanel), 5f, 5f, EnergyWidth - 10f, EnergyHeight - 10f);
+        AddImage(Stretch(CreateRect("Background", barTrack)), RoundedSprite(1, 0f)).color = WithAlpha(Dim, 0.16f);
+        RectTransform fillRect = Stretch(CreateRect("Bar Fill", barTrack));
+        fillRect.anchorMax = new Vector2(1f, 1f);
+        energyFill = AddImage(fillRect, RoundedSprite(1, 0f));
 
-        AddText(Place(CreateRect("Label", energyPanel), 66f, 12f, 120f, 22f), headingFont, 10, "ENERGY", Ice, TextAnchor.MiddleLeft);
-        percentText = AddText(Place(CreateRect("Percent", energyPanel), 66f, 12f, 190f, 22f), boldFont, 15, "100%", Cyan, TextAnchor.MiddleRight);
-
-        Sprite cellSprite = RoundedSprite(2, 0f);
-        for (int i = 0; i < CellCount; i++)
-            cells[i] = AddImage(Place(CreateRect("Cell " + (i + 1), energyPanel), 66f + i * 19f, 40f, 16f, 12f), cellSprite);
-
-        cellGlow = AddImage(CreateRect("Cell Glow", energyPanel), GlowSprite(2, 8));
-        RectTransform glowRect = cellGlow.rectTransform;
-        glowRect.anchorMin = Vector2.zero;
-        glowRect.anchorMax = Vector2.one;
-        glowRect.offsetMin = new Vector2(-8f, -8f);
-        glowRect.offsetMax = new Vector2(8f, 8f);
-
-        warningText = AddText(Place(CreateRect("Warning", energyPanel), 66f, 54f, 200f, 18f), boldFont, 11, "LOW POWER", Red, TextAnchor.MiddleLeft);
+        warningText = AddText(Place(CreateRect("Warning", energyPanel), 80f, 27f, EnergyWidth - 160f, 16f), boldFont, 9, "LOW POWER", Red, TextAnchor.MiddleCenter);
         warningText.enabled = false;
+        UpdateEnergyMeter();
     }
 
     // ---------- Mode toggle ----------

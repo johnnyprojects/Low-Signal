@@ -7,10 +7,10 @@ using UnityEngine.InputSystem;
 /// Holding Space swims: the player floats slowly upward and WASD steers horizontally.
 /// Releasing Space lets gravity pull the player back down to walk.
 /// Shift boosts in both modes. The capsule stays upright while the camera looks around.
-/// Swimming and boosting draw from the Flashlight's battery; when it is empty, neither works.
+/// Swimming and boosting draw from the player's shared energy; when it is empty, neither works.
 /// </summary>
 [DisallowMultipleComponent]
-[RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
+[RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider), typeof(PlayerEnergy))]
 public class UnderwaterSwimController : MonoBehaviour
 {
     [Header("Swimming")]
@@ -24,8 +24,8 @@ public class UnderwaterSwimController : MonoBehaviour
     [SerializeField, Min(0f)] private float swimMoveSpeed = 3f;
 
     [Header("Energy")]
-    [Tooltip("The battery swimming and boosting draw from. Found on this object when left empty; with none, both are free.")]
-    [SerializeField] private Flashlight energySource;
+    [Tooltip("The battery swimming and boosting draw from. Found on this object when left empty; shared with all powered abilities.")]
+    [SerializeField] private PlayerEnergy energySource;
     [Tooltip("Fraction of a full charge spent per second while swimming (0.05 = 5%).")]
     [SerializeField, Range(0f, 1f)] private float swimEnergyPerSecond = 0.05f;
     [Tooltip("Fraction of a full charge spent per second while boosting and moving (0.05 = 5%).")]
@@ -46,6 +46,10 @@ public class UnderwaterSwimController : MonoBehaviour
     [Tooltip("Fraction of acceleration available while airborne.")]
     [SerializeField, Range(0f, 1f)] private float airControl = 0.3f;
     [SerializeField, Range(0f, 89f)] private float maxSlopeAngle = 45f;
+    [Tooltip("Highest ledge the player can step onto while walking (metres). The city curb is about 0.56 m above the road.")]
+    [SerializeField, Min(0f)] private float maxStepHeight = 0.65f;
+    [Tooltip("Time for the camera to catch up after stepping onto a curb.")]
+    [SerializeField, Min(0.01f)] private float stepSmoothingSeconds = 0.22f;
     [Tooltip("How far below the capsule the ground is searched for.")]
     [SerializeField, Min(0.001f)] private float groundCheckDistance = 0.1f;
 
@@ -57,11 +61,15 @@ public class UnderwaterSwimController : MonoBehaviour
     [SerializeField] private bool lockCursorOnStart = true;
 
     private Rigidbody body;
+    private CapsuleCollider capsule;
+    private readonly Collider[] stepOverlaps = new Collider[16];
     private Vector3 moveInput;
     private bool boosting;
     private bool swimming;
     private float yaw;
     private float pitch;
+    private Vector3 viewRestPosition;
+    private Vector3 stepViewOffset;
 
     public bool IsSwimming => swimming;
     public bool IsGrounded { get; private set; }
@@ -89,9 +97,11 @@ public class UnderwaterSwimController : MonoBehaviour
         body.constraints = RigidbodyConstraints.FreezeRotation;
         body.interpolation = RigidbodyInterpolation.Interpolate;
         body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-        GetComponent<CapsuleCollider>().isTrigger = false;
+        capsule = GetComponent<CapsuleCollider>();
+        capsule.isTrigger = false;
         if (energySource == null)
-            energySource = GetComponent<Flashlight>();
+            energySource = GetComponent<PlayerEnergy>();
+        viewRestPosition = viewTransform.localPosition;
         SyncLookRotation();
     }
 
@@ -145,7 +155,7 @@ public class UnderwaterSwimController : MonoBehaviour
             return;
         float rate = (swimming ? swimEnergyPerSecond : 0f) + (boosting ? boostEnergyPerSecond : 0f);
         // An empty battery cancels both, so the player sinks and walks at normal speed.
-        if (rate > 0f && !energySource.UseEnergy(rate * Time.deltaTime))
+        if (rate > 0f && !energySource.Consume(rate * energySource.MaxEnergy * Time.deltaTime))
         {
             swimming = false;
             boosting = false;
@@ -179,6 +189,7 @@ public class UnderwaterSwimController : MonoBehaviour
                 // Follow the slope so walking neither launches off downhill nor slows uphill.
                 Vector3 target = Vector3.ProjectOnPlane(wishVelocity, groundNormal).normalized * wishVelocity.magnitude;
                 velocity = Vector3.MoveTowards(velocity, target, rate * dt);
+                TryStepUp(wishVelocity, dt);
             }
             else
             {
@@ -189,6 +200,66 @@ public class UnderwaterSwimController : MonoBehaviour
         }
 
         body.linearVelocity = LimitVelocityAtSurfaces(velocity);
+    }
+
+    private void LateUpdate()
+    {
+        if (stepViewOffset.sqrMagnitude < 0.000001f)
+            stepViewOffset = Vector3.zero;
+        else
+            stepViewOffset = Vector3.MoveTowards(stepViewOffset, Vector3.zero,
+                maxStepHeight * Time.unscaledDeltaTime / Mathf.Max(0.01f, stepSmoothingSeconds));
+        viewTransform.localPosition = viewRestPosition + transform.InverseTransformVector(stepViewOffset);
+    }
+
+    private void TryStepUp(Vector3 wishVelocity, float dt)
+    {
+        if (maxStepHeight <= 0f || wishVelocity.sqrMagnitude < 0.0001f)
+            return;
+
+        Vector3 direction = wishVelocity.normalized;
+        float approach = wishVelocity.magnitude * dt + collisionSkin;
+        if (!body.SweepTest(direction, out RaycastHit wall, approach, QueryTriggerInteraction.Ignore)
+            || Vector3.Dot(wall.normal, direction) > -0.1f)
+            return;
+
+        float foot = capsule.bounds.min.y;
+        float radius = capsule.bounds.extents.x;
+        // Sample the top beyond the near edge, including the thickness of a curb.
+        Vector3 probe = new Vector3(body.position.x, foot + maxStepHeight + 0.1f, body.position.z)
+            + direction * (wall.distance + radius + 0.2f);
+        RaycastHit[] surfaces = Physics.RaycastAll(probe, Vector3.down, maxStepHeight + 0.2f,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        float bestRise = 0f;
+        foreach (RaycastHit surface in surfaces)
+        {
+            float rise = surface.point.y - foot;
+            if (surface.collider == capsule || rise <= collisionSkin || rise > maxStepHeight
+                || surface.normal.y < Mathf.Cos(maxSlopeAngle * Mathf.Deg2Rad) || rise <= bestRise)
+                continue;
+            bestRise = rise;
+        }
+        if (bestRise <= 0f || body.SweepTest(Vector3.up, out _, bestRise + collisionSkin,
+                QueryTriggerInteraction.Ignore))
+            return;
+
+        // Leave a small gap above the step so the destination capsule does not start embedded.
+        Vector3 destination = body.position + Vector3.up * (bestRise + collisionSkin)
+            + direction * (wall.distance + radius + collisionSkin);
+        Vector3 center = destination + transform.rotation * Vector3.Scale(capsule.center, transform.lossyScale);
+        float halfStraight = Mathf.Max(0f, capsule.bounds.extents.y - radius);
+        float clearanceRadius = Mathf.Max(0.01f, radius - collisionSkin);
+        int count = Physics.OverlapCapsuleNonAlloc(center + Vector3.up * halfStraight,
+            center - Vector3.up * halfStraight, clearanceRadius, stepOverlaps,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+            if (stepOverlaps[i] != capsule)
+                return;
+        if (count == stepOverlaps.Length)
+            return;
+
+        stepViewOffset -= destination - body.position;
+        body.position = destination;
     }
 
     private bool TryGetGround(out Vector3 groundNormal)
@@ -264,6 +335,9 @@ public class UnderwaterSwimController : MonoBehaviour
 
     private void OnDisable()
     {
+        if (viewTransform != null)
+            viewTransform.localPosition = viewRestPosition;
+        stepViewOffset = Vector3.zero;
         moveInput = Vector3.zero;
         boosting = false;
         swimming = false;

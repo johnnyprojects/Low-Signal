@@ -93,6 +93,10 @@ public static partial class UnderwaterCityBuilder
         buildings = Group("02 - City blocks (sealed exteriors)");
         dressing = Group("04 - Cars, rubble and marine growth");
         // The former access shaft is closed; fountain access is future gameplay.
+        // Keep a single recessed floor beneath the modular slabs. The visible slabs
+        // still define the district, while this underlay prevents camera/fog views
+        // from exposing the small construction seams between them.
+        Box("Continuous seabed underlay", streets, V(0,-4.08f,0), V(440,8.16f,440), sand);
         Box("Seabed west", streets, V(-112,-4,0), V(216,8,440), sand);
         Box("Seabed east", streets, V(112,-4,0), V(216,8,440), sand);
         Box("Seabed south", streets, V(0,-4,-108), V(8,8,224), sand);
@@ -106,8 +110,9 @@ public static partial class UnderwaterCityBuilder
         Building("Plaza west - municipal offices", V(-48,0,26),20,24,32,true,true);
         Building("Plaza north - former records office", V(-26,0,49),24,18,23,true,false);
         Building("Transit rear - sealed offices", V(32,0,54),30,16,26,false,true);
-        Building("Collapsed west tower - swim above or around", V(-107,0,20),16,17,60,false,true);
+        Building("Collapsed west tower - swim above or around", CollapsedTowerPosition,16,17,60,false,true);
         buildings.Find("Collapsed west tower - swim above or around").rotation=Quaternion.Euler(0,0,68);
+        AddCollapsedTowerSupport(buildings.Find("Collapsed west tower - swim above or around"));
         OpenBuilding("Explore A - corner shop", V(-48,0,-24), 0);
         OpenBuilding("Explore B - former transit waiting room", V(32,0,78), 180);
         Plaza();
@@ -144,6 +149,8 @@ public static partial class UnderwaterCityBuilder
         Group("Facility relic destination - future content",hooks).position=V(0,-12,40);
         AssetDatabase.SaveAssets();
         EditorSceneManager.SaveScene(SceneManager.GetActiveScene(),path);
+        CitySurfaceCleanup.Repair();
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(),path);
     }
 
     static void Road(bool alongZ, float offset)
@@ -177,15 +184,17 @@ public static partial class UnderwaterCityBuilder
 
     static void RoadSection(Transform root,float start,float end)
     {
-        Box("Connected carriageway",root,V(0,.10f,(start+end)/2),V(19,.20f,end-start),asphalt);
+        const float seamOverlap=.08f;
+        Box("Connected carriageway",root,V(0,.10f,(start+end)/2),V(19,.20f,end-start+seamOverlap*2),asphalt);
     }
 
     static void WalkSection(Transform root,float start,float end)
     {
         foreach(float side in new[]{-1f,1f})
         {
-            Box("Sidewalk",root,V(side*11.5f,.3f,(start+end)/2),V(4,.6f,end-start),concrete);
-            Box("Curb",root,V(side*9.65f,.38f,(start+end)/2),V(.3f,.76f,end-start),pale);
+            const float seamOverlap=.08f;
+            Box("Sidewalk",root,V(side*11.5f,.3f,(start+end)/2),V(4,.6f,end-start+seamOverlap*2),concrete);
+            Box("Curb",root,V(side*9.65f,.38f,(start+end)/2),V(.3f,.76f,end-start+seamOverlap*2),pale);
             for(float z=start+12;z<end-8;z+=32)
             {
                 var lamp=Group("Dead street light",root);
@@ -239,7 +248,9 @@ public static partial class UnderwaterCityBuilder
         var body=masonry?brick:concrete;
         // A continuous solid body seals every window, including the damaged upper silhouette.
         Box("Sealed structural mass",root,V(0,h/2,0),V(w,h,d),body);
-        Box("Algae tide stain",root,V(0,1.4f,0),V(w+.05f,2.8f,d+.05f),algae,false);
+        // Keep the stain clearly in front of the structural wall.  A 2.5 cm
+        // offset was close enough to z-fight at shallow viewing angles.
+        Box("Algae tide stain",root,V(0,1.4f,0),V(w+.20f,2.8f,d+.20f),algae,false);
         int floors=Mathf.FloorToInt(h/4.5f);
         for(int floor=1;floor<floors;floor++)
         {

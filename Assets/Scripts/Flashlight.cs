@@ -4,11 +4,10 @@ using UnityEngine.InputSystem;
 /// <summary>
 /// Attach to the Player. Press F to toggle a spot light that points where the view looks.
 /// Assign an existing Light, or one is created under the child camera at runtime.
-/// The light drains energy while on and switches off at 0%. While off, energy recharges
-/// after a short delay until full or the light is switched back on.
-/// Other systems (swimming, sprinting) share this battery through UseEnergy.
+/// Consumes the player's shared energy while on and switches off when it is empty.
 /// </summary>
 [DisallowMultipleComponent]
+[RequireComponent(typeof(PlayerEnergy))]
 public class Flashlight : MonoBehaviour
 {
     [Header("Light")]
@@ -28,23 +27,19 @@ public class Flashlight : MonoBehaviour
     [Header("Energy")]
     [Tooltip("Seconds a full charge lasts with the light on.")]
     [SerializeField, Min(0.1f)] private float fullDrainSeconds = 60f;
-    [Tooltip("Seconds after switching off before recharging begins.")]
-    [SerializeField, Min(0f)] private float rechargeDelay = 5f;
-    [Tooltip("Seconds to recharge from empty to full.")]
-    [SerializeField, Min(0.1f)] private float fullRechargeSeconds = 30f;
+    [Tooltip("Shared player energy. Found on this object when left empty.")]
+    [SerializeField] private PlayerEnergy energySource;
 
     [Header("State")]
     [SerializeField] private bool startOn;
 
-    private float energy = 1f;
-    private float offTimer;
-
     public bool IsOn => flashlight != null && flashlight.enabled;
-    /// <summary>Remaining energy from 0 (empty) to 1 (full).</summary>
-    public float Energy01 => energy;
 
     private void Awake()
     {
+        if (energySource == null)
+            energySource = GetComponent<PlayerEnergy>();
+
         if (viewTransform == null)
         {
             Camera childCamera = GetComponentInChildren<Camera>();
@@ -65,35 +60,19 @@ public class Flashlight : MonoBehaviour
             && keyboard.fKey.wasPressedThisFrame)
             Toggle();
 
-        UpdateEnergy(Time.deltaTime);
-    }
-
-    private void UpdateEnergy(float deltaTime)
-    {
         if (IsOn)
         {
-            energy = Mathf.Max(0f, energy - deltaTime / fullDrainSeconds);
-            if (energy <= 0f)
+            energySource.Consume(energySource.MaxEnergy * Time.deltaTime / Mathf.Max(0.1f, fullDrainSeconds));
+            if (!energySource.HasEnergy)
                 SetOn(false);
-            return;
         }
-
-        offTimer += deltaTime;
-        if (offTimer >= rechargeDelay)
-            energy = Mathf.Min(1f, energy + deltaTime / fullRechargeSeconds);
     }
 
-    /// <summary>
-    /// Spends energy from the shared battery. Returns false, spending nothing, when the battery is empty.
-    /// Any use restarts the wait before recharging.
-    /// </summary>
-    public bool UseEnergy(float amount)
+    private void LateUpdate()
     {
-        if (energy <= 0f)
-            return false;
-        energy = Mathf.Max(0f, energy - amount);
-        offTimer = 0f;
-        return true;
+        // Other abilities can empty the shared pool after this light's Update.
+        if (IsOn && !energySource.HasEnergy)
+            SetOn(false);
     }
 
     public void Toggle() => SetOn(!IsOn);
@@ -103,15 +82,12 @@ public class Flashlight : MonoBehaviour
         if (flashlight == null)
             return;
         // An empty battery cannot power the light.
-        if (on && energy <= 0f)
+        if (on && (energySource == null || !energySource.HasEnergy))
             on = false;
         if (on == flashlight.enabled)
             return;
 
         flashlight.enabled = on;
-        // Each switch-off restarts the wait before recharging.
-        if (!on)
-            offTimer = 0f;
     }
 
     private Light CreateLight()

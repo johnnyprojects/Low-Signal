@@ -171,4 +171,4 @@ Packages/packages-lock.json linguist-generated
 LightingData.asset     binary
 
 # Generated mesh geometry belongs in LFS, while scenes and settings stay readable.
-Assets/UnderwaterCity/Meshes/CitySurfaceMeshes.asset lfs
+Assets/_LowSignal/World/UnderwaterCity/Meshes/CitySurfaceMeshes.asset lfs

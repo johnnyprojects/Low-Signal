@@ -9,8 +9,8 @@ using UnityEngine.SceneManagement;
 // Editor-only authoring: the saved level contains ordinary editable objects, no runtime generator.
 public static partial class UnderwaterCityBuilder
 {
-    const string Root = "Assets/UnderwaterCity";
-    const string ScenePath = "Assets/Scenes/UnderwaterCity.unity";
+    const string Root = "Assets/_LowSignal/World/UnderwaterCity";
+    const string ScenePath = "Assets/_LowSignal/Scenes/UnderwaterCity.unity";
     static Material concrete, brick, pale, glass, asphalt, sand, rust, algae, line, beacon;
     static System.Random random;
     static Transform buildings, streets, dressing;
@@ -76,7 +76,7 @@ public static partial class UnderwaterCityBuilder
     {
         random = new System.Random(221008);
         Directory.CreateDirectory(Root + "/Materials");
-        Directory.CreateDirectory("Assets/Scenes");
+        Directory.CreateDirectory("Assets/_LowSignal/Scenes");
         AssetDatabase.Refresh();
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         concrete = Mat("Weathered concrete", new Color(.29f,.35f,.34f));

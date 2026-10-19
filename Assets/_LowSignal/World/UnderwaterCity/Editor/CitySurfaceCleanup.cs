@@ -201,7 +201,7 @@ public static class CitySurfaceCleanup
     {
         try
         {
-            EditorSceneManager.OpenScene("Assets/Scenes/UnderwaterCity.unity");
+            EditorSceneManager.OpenScene("Assets/_LowSignal/Scenes/UnderwaterCity.unity");
             Repair();
             File.Copy("Logs/city-surface-cleanup.txt", "Logs/city-surface-changes.txt", true);
             EditorSceneManager.SaveScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene());

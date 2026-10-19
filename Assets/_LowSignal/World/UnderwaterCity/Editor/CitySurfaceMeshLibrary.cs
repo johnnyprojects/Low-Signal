@@ -9,7 +9,7 @@ using UnityEngine;
 /// <summary>Stores generated surface meshes once per geometry in a shared asset.</summary>
 public static class CitySurfaceMeshLibrary
 {
-    public const string AssetPath = "Assets/UnderwaterCity/Meshes/CitySurfaceMeshes.asset";
+    public const string AssetPath = "Assets/_LowSignal/World/UnderwaterCity/Meshes/CitySurfaceMeshes.asset";
     private static Dictionary<string, Mesh> meshes;
 
     public static string Fingerprint(Mesh mesh)

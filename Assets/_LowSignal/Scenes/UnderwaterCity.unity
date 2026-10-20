@@ -907045,7 +907045,7 @@ MonoBehaviour:
   range: 30
   spotAngle: 55
   innerSpotAngle: 25
-  localOffset: {x: 0.25, y: -0.2, z: 0.3}
+  localOffset: {x: 0.25, y: 0.3, z: 0.6}
   shadows: 2
   fullDrainSeconds: 90
   energySource: {fileID: 0}

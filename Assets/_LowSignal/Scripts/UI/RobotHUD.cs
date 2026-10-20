@@ -1,68 +1,104 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using static HudStyle;
 
 /// <summary>
-/// Attach to the Player. Builds the robot HUD at runtime from the Figma design
-/// ("Underwater Robot · HUD"): an energy meter for the player's shared energy (top-left)
-/// and a Walk/Swim mode indicator with a hold-Space hint (bottom-center).
-/// Fonts and icons are loaded from Assets/Resources/RobotHUD; panel shapes are generated.
+/// Attach to the Player. Builds the robot's status readouts in the top-left corner at runtime, in the angular HUD style:
+///  - Energy: a chamfered glass panel with a rhombus charge gauge sweeping round the bolt, the percentage, and a bar
+///    of slanted cells. Spent energy leaves a white trail that drains away after a moment, and the cell at the charge
+///    edge shimmers while recharging. Amber when low; red with a blinking LOW POWER label when critical.
+///  - Abilities: a strip below it. On the left, the six-dot ability wheel icon and the TAB keycap, which press in and
+///    light up while the ability wheel (AbilityWheel) is open. On the right, the equipped ability's icon, name and state
+///    (ON/OFF, READY or a cooldown) with a right-click mouse hint; it changes as soon as the wheel equips something new
+///    and flashes when the ability is used.
+/// The hover/swim controls live in MovementModeHUD. Fonts and the bolt icon load from Assets/Resources/RobotHUD.
 /// </summary>
 [DisallowMultipleComponent]
 public class RobotHUD : MonoBehaviour
 {
+    private const float PanelWidth = 400f;
+    private const float PanelHeight = 92f;
+    private const int PanelCut = 20;
+    private const float GaugeSize = 70f;
+    private const float TextLeft = 98f;
+    private const float CellHeight = 22f;
+    private const int CellCount = 16;
+    private const float CellGap = 3f;
+    private const float CellSlant = 0.35f;
+    private const float StripWidth = 300f;
+    private const float StripHeight = 58f;
+    private const float StripDivider = 104f;
+    private const float GemSize = 44f;
+    private const float AbilityGap = 10f;
+
     [Tooltip("Found on this object, or anywhere in the scene, when left empty.")]
     [SerializeField] private PlayerEnergy energySource;
-    [Tooltip("Found on this object, or anywhere in the scene, when left empty.")]
-    [SerializeField] private UnderwaterSwimController swimController;
 
     [Header("Energy")]
     [Tooltip("At or below this fraction the meter turns amber.")]
     [SerializeField, Range(0f, 1f)] private float lowThreshold = 0.3f;
     [Tooltip("At or below this fraction the meter turns red and shows the warning.")]
     [SerializeField, Range(0f, 1f)] private float criticalThreshold = 0.1f;
+    [Tooltip("Seconds spent energy lingers as a white trail before draining away.")]
+    [SerializeField, Min(0f)] private float trailDelay = 0.35f;
+    [Tooltip("Fraction of the bar per second the trail drains once it starts.")]
+    [SerializeField, Min(0.01f)] private float trailDrainSpeed = 0.6f;
+
+    [Header("Abilities")]
+    [Tooltip("The wheel the TAB hint and equipped-ability readout report on. Found on this object, or anywhere in the scene, when left empty.")]
+    [SerializeField] private AbilityWheel abilityWheel;
+    [Tooltip("Optional right-click icon. Leave empty to use the built-in mouse drawing.")]
+    [SerializeField] private Sprite rightClickIcon;
+    [Tooltip("Seconds the equipped ability flashes when it is used.")]
+    [SerializeField, Min(0.01f)] private float usePulseSeconds = 0.4f;
+    [Tooltip("Keycap colour while its key is held.")]
+    [SerializeField] private Color pressedTint = new Color(0.6f, 0.95f, 1f);
+    [Tooltip("Seconds for the keycap to press in and spring back.")]
+    [SerializeField, Min(0.01f)] private float pressSeconds = 0.08f;
 
     [Header("Layout")]
     [Tooltip("Canvas reference size. 1280x720 matches the Figma frame, so its pixel values carry over 1:1.")]
     [SerializeField] private Vector2 referenceResolution = new Vector2(1280f, 720f);
+    [Tooltip("Gap between the panels and the top-left corner of the screen, in reference pixels.")]
     [SerializeField, Min(0f)] private float screenMargin = 32f;
-    [SerializeField, Min(1f)] private float modeSwitchSpeed = 12f;
+    [Tooltip("Energy panel opacity while the battery is full; it brightens fully as soon as energy is spent.")]
+    [SerializeField, Range(0f, 1f)] private float fullOpacity = 0.6f;
     [SerializeField, Min(0.01f)] private float energyFadeSeconds = 0.3f;
-
-    private static readonly Color Glass = new Color(0.02f, 0.09f, 0.13f, 0.82f);
-    private static readonly Color Cyan = new Color(0.15f, 0.88f, 1f);
-    private static readonly Color Amber = new Color(1f, 0.72f, 0.2f);
-    private static readonly Color Red = new Color(1f, 0.3f, 0.36f);
-    private static readonly Color Dim = new Color(0.55f, 0.75f, 0.82f);
-    private static readonly Color Ink = new Color(0.02f, 0.09f, 0.13f);
-    private static readonly Color Ice = new Color(0.9f, 0.98f, 1f);
-    private static readonly Color KeyShadow = new Color(0.05f, 0.45f, 0.6f);
-
-    private const float GlowSize = 8f;
-    private const float EnergyWidth = 320f;
-    private const float EnergyHeight = 24f;
 
     private GameObject canvasObject;
     private Font headingFont;
     private Font boldFont;
-    private Font semiBoldFont;
 
     private RectTransform energyPanel;
     private CanvasGroup energyCanvasGroup;
-    private Image energyOutline;
-    private Image energyFill;
+    private Image panelGlow;
+    private Image panelOutline;
+    private Image gaugeFill;
+    private Image bolt;
+    private Text labelText;
     private Text percentText;
-    private Text warningText;
+    private Image[] cells;
     private int shownPercent = -1;
-    private Color shownColor;
+    private bool shownCritical;
+    private float trail = 1f;
+    private float trailHoldUntil;
+    private float lastEnergy = 1f;
 
-    private RectTransform modePanel;
-    private RectTransform highlight;
-    private Image walkIcon;
-    private Image swimIcon;
-    private Text walkLabel;
-    private Text swimLabel;
-    private RectTransform keycap;
-    private float modeBlend;
+    private Keycap tabKey;
+    private RectTransform wheel;
+    private Image wheelImage;
+    private Image stripGlow;
+    private Image stripOutline;
+    private RectTransform gem;
+    private Image gemOutline;
+    private Image abilityIcon;
+    private Text abilityName;
+    private Text abilityStatus;
+    private Image mouseBody;
+    private Image mouseButton;
+    private AbilityId shownAbility = (AbilityId)(-1);
+    private float usePulse;
 
     private void Awake()
     {
@@ -70,29 +106,38 @@ public class RobotHUD : MonoBehaviour
             energySource = GetComponent<PlayerEnergy>();
         if (energySource == null)
             energySource = FindAnyObjectByType<PlayerEnergy>();
-        if (swimController == null)
-            swimController = GetComponent<UnderwaterSwimController>();
-        if (swimController == null)
-            swimController = FindAnyObjectByType<UnderwaterSwimController>();
+        if (abilityWheel == null)
+            abilityWheel = GetComponent<AbilityWheel>();
+        if (abilityWheel == null)
+            abilityWheel = FindAnyObjectByType<AbilityWheel>();
 
-        headingFont = LoadFont("Michroma-Regular");
-        boldFont = LoadFont("TitilliumWeb-Bold");
-        semiBoldFont = LoadFont("TitilliumWeb-SemiBold");
+        headingFont = LoadFont("Michroma-Regular", this);
+        boldFont = LoadFont("TitilliumWeb-Bold", this);
 
-        BuildCanvas();
-        // Each widget is skipped when the script it reports on is missing.
+        canvasObject = CreateCanvas("Robot HUD", referenceResolution, 10);
+        // The meter is skipped when the script it reports on is missing; the ability strip then takes its place.
         if (energySource != null)
             BuildEnergyMeter();
-        if (swimController != null)
-            BuildModeToggle();
+        BuildAbilityStrip(energySource != null ? screenMargin + PanelHeight + AbilityGap : screenMargin);
+    }
+
+    private void OnEnable()
+    {
+        if (abilityWheel != null)
+            abilityWheel.AbilityUsed += OnAbilityUsed;
+    }
+
+    private void OnDisable()
+    {
+        if (abilityWheel != null)
+            abilityWheel.AbilityUsed -= OnAbilityUsed;
     }
 
     private void LateUpdate()
     {
         if (energyPanel != null)
             UpdateEnergyMeter();
-        if (modePanel != null)
-            UpdateModeToggle(Time.unscaledDeltaTime);
+        UpdateAbilityStrip();
     }
 
     private void OnDestroy()
@@ -101,42 +146,50 @@ public class RobotHUD : MonoBehaviour
             Destroy(canvasObject);
     }
 
+    /// <summary>A rect anchored and pivoted on the top-left corner of the screen, so it stays there at any resolution.</summary>
+    private RectTransform CreateCornerPanel(string name, float top, float width, float height)
+    {
+        RectTransform panel = CreateRect(name, canvasObject.transform);
+        panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(0f, 1f);
+        panel.anchoredPosition = new Vector2(screenMargin, -top);
+        panel.sizeDelta = new Vector2(width, height);
+        return panel;
+    }
+
     // ---------- Energy meter ----------
 
     private void UpdateEnergyMeter()
     {
         float energy = energySource.Energy01;
-        bool shouldShow = energy < 1f;
-        if (shouldShow && !energyPanel.gameObject.activeSelf)
-            energyPanel.gameObject.SetActive(true);
-
-        float targetAlpha = shouldShow ? 0.8f : 0f;
+        float targetAlpha = energy >= 1f ? fullOpacity : 1f;
         energyCanvasGroup.alpha = Mathf.MoveTowards(energyCanvasGroup.alpha, targetAlpha,
-            0.8f * Time.unscaledDeltaTime / Mathf.Max(0.01f, energyFadeSeconds));
-        if (!shouldShow && energyCanvasGroup.alpha <= 0f)
-            energyPanel.gameObject.SetActive(false);
-        if (!energyPanel.gameObject.activeSelf)
-            return;
+            Time.unscaledDeltaTime / Mathf.Max(0.01f, energyFadeSeconds));
+
+        // The trail holds where the charge was, then drains down to meet it; recharging pulls it straight up.
+        if (energy < lastEnergy - 0.0001f)
+            trailHoldUntil = Time.unscaledTime + trailDelay;
+        if (energy >= trail)
+            trail = energy;
+        else if (Time.unscaledTime >= trailHoldUntil)
+            trail = Mathf.MoveTowards(trail, energy, trailDrainSpeed * Time.unscaledDeltaTime);
+        bool recharging = energy > lastEnergy + 0.00001f;
+        lastEnergy = energy;
 
         bool critical = energy <= criticalThreshold;
         Color accent = critical ? Red : energy <= lowThreshold ? Amber : Cyan;
-        energyFill.rectTransform.anchorMax = new Vector2(energy, 1f);
+        // Blink while critical so it reads as urgent without hiding it.
+        float pulse = critical ? 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 3f)) : 1f;
 
-        if (accent != shownColor)
+        gaugeFill.fillAmount = energy;
+        gaugeFill.color = bolt.color = WithAlpha(accent, pulse);
+        percentText.color = accent;
+        panelOutline.color = WithAlpha(accent, 0.55f * pulse);
+        panelGlow.color = WithAlpha(accent, 0.28f * pulse);
+        labelText.color = critical ? WithAlpha(Red, pulse) : Dim;
+        if (critical != shownCritical)
         {
-            shownColor = accent;
-            energyOutline.color = WithAlpha(accent, 0.55f);
-            percentText.color = warningText.color = accent;
-            energyFill.color = accent;
-
-            warningText.enabled = critical;
-        }
-
-        if (critical)
-        {
-            // Blink the warning so it reads as urgent without hiding it.
-            float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 3f));
-            warningText.color = WithAlpha(accent, pulse);
+            shownCritical = critical;
+            labelText.text = critical ? "// LOW POWER" : "// ENERGY";
         }
 
         int percent = Mathf.CeilToInt(energy * 100f);
@@ -145,250 +198,144 @@ public class RobotHUD : MonoBehaviour
             shownPercent = percent;
             percentText.text = percent + "%";
         }
+
+        Color empty = WithAlpha(Dim, 0.14f);
+        Color spent = WithAlpha(Ice, 0.55f);
+        for (int i = 0; i < CellCount; i++)
+        {
+            float fill = Mathf.Clamp01(energy * CellCount - i);
+            float lost = Mathf.Clamp01(trail * CellCount - i);
+            Color cell = Color.Lerp(Color.Lerp(empty, spent, lost), accent, fill);
+            // The cell being refilled shimmers while the battery recharges.
+            if (recharging && fill > 0f && fill < 1f)
+                cell = Color.Lerp(cell, Ice, 0.35f + 0.35f * Mathf.Sin(Time.unscaledTime * 12f));
+            cells[i].color = cell;
+        }
     }
 
     private void BuildEnergyMeter()
     {
-        energyPanel = CreateRect("Energy Meter", canvasObject.transform);
-        energyPanel.anchorMin = energyPanel.anchorMax = energyPanel.pivot = new Vector2(0.5f, 1f);
-        energyPanel.anchoredPosition = new Vector2(0f, -screenMargin);
-        energyPanel.sizeDelta = new Vector2(EnergyWidth, EnergyHeight);
+        energyPanel = CreateCornerPanel("Energy Meter", screenMargin, PanelWidth, PanelHeight);
         energyCanvasGroup = energyPanel.gameObject.AddComponent<CanvasGroup>();
-        energyCanvasGroup.alpha = 0f;
-        // Center the track itself, with equal insets and no generated glow.
-        AddImage(Stretch(CreateRect("Glass", energyPanel)), RoundedSprite(2, 0f)).color = WithAlpha(Glass, 0.55f);
-        energyOutline = AddImage(Stretch(CreateRect("Outline", energyPanel)), RoundedSprite(2, 1f));
-        AddText(Place(CreateRect("Label", energyPanel), 5f, 27f, 62f, 16f), headingFont, 8, "ENERGY", Dim, TextAnchor.MiddleLeft);
-        percentText = AddText(Place(CreateRect("Percent", energyPanel), EnergyWidth - 51f, 27f, 46f, 16f), boldFont, 10, "100%", Cyan, TextAnchor.MiddleRight);
+        energyCanvasGroup.alpha = fullOpacity;
+        BuildAngularPanel(energyPanel, PanelCut, out panelGlow, out panelOutline);
 
-        RectTransform barTrack = Place(CreateRect("Bar Track", energyPanel), 5f, 5f, EnergyWidth - 10f, EnergyHeight - 10f);
-        AddImage(Stretch(CreateRect("Background", barTrack)), RoundedSprite(1, 0f)).color = WithAlpha(Dim, 0.16f);
-        RectTransform fillRect = Stretch(CreateRect("Bar Fill", barTrack));
-        fillRect.anchorMax = new Vector2(1f, 1f);
-        energyFill = AddImage(fillRect, RoundedSprite(1, 0f));
+        // Rhombus charge gauge, echoing the swim badge: a dim track, the charge sweeping clockwise from the top, and the bolt.
+        RectTransform gauge = Place(CreateRect("Gauge", energyPanel), 14f, (PanelHeight - GaugeSize) * 0.5f, GaugeSize, GaugeSize);
+        int gaugeTexture = Mathf.RoundToInt(GaugeSize * 2f);
+        AddImage(Stretch(CreateRect("Core", gauge)), DiamondSprite(gaugeTexture, 0f, 4f)).color = WithAlpha(Ink, 0.6f);
+        Sprite gaugeRing = DiamondSprite(gaugeTexture, 6f, 4f);
+        AddImage(Stretch(CreateRect("Track", gauge)), gaugeRing).color = WithAlpha(Dim, 0.2f);
+        gaugeFill = AddImage(Stretch(CreateRect("Charge", gauge)), gaugeRing);
+        gaugeFill.type = Image.Type.Filled;
+        gaugeFill.fillMethod = Image.FillMethod.Radial360;
+        gaugeFill.fillOrigin = (int)Image.Origin360.Top;
+        gaugeFill.fillClockwise = true;
+        bolt = AddImage(Stretch(CreateRect("Bolt", gauge), -GaugeSize * 0.3f), LoadIcon("bolt", this));
+        bolt.preserveAspect = true;
 
-        warningText = AddText(Place(CreateRect("Warning", energyPanel), 80f, 27f, EnergyWidth - 160f, 16f), boldFont, 9, "LOW POWER", Red, TextAnchor.MiddleCenter);
-        warningText.enabled = false;
+        float barWidth = PanelWidth - TextLeft - 24f;
+        labelText = AddText(Place(CreateRect("Label", energyPanel), TextLeft, 16f, 200f, 18f), headingFont, 12, "// ENERGY", Dim, TextAnchor.MiddleLeft);
+        percentText = AddText(Place(CreateRect("Percent", energyPanel), PanelWidth - 24f - 100f, 8f, 100f, 32f), boldFont, 28, "100%", Cyan, TextAnchor.MiddleRight);
+
+        RectTransform bar = Place(CreateRect("Cells", energyPanel), TextLeft, 50f, barWidth, CellHeight);
+        float cellWidth = (barWidth - CellGap * (CellCount - 1)) / CellCount;
+        Sprite cellSprite = SlantedCellSprite(Mathf.RoundToInt(cellWidth * 3f), Mathf.RoundToInt(CellHeight * 3f), CellSlant);
+        cells = new Image[CellCount];
+        for (int i = 0; i < CellCount; i++)
+            cells[i] = AddImage(Place(CreateRect("Cell " + (i + 1), bar), i * (cellWidth + CellGap), 0f, cellWidth, CellHeight), cellSprite);
+
+        trail = lastEnergy = energySource.Energy01;
         UpdateEnergyMeter();
     }
 
-    // ---------- Mode toggle ----------
+    // ---------- Ability strip ----------
 
-    private void UpdateModeToggle(float deltaTime)
+    private void OnAbilityUsed(AbilityWheel.AbilitySlot slot)
     {
-        bool swimming = swimController.IsSwimming;
-
-        // Slide the highlight between WALK and SWIM rather than snapping.
-        modeBlend = Mathf.MoveTowards(modeBlend, swimming ? 1f : 0f, modeSwitchSpeed * deltaTime);
-        float t = Mathf.SmoothStep(0f, 1f, modeBlend);
-        highlight.anchoredPosition = new Vector2(Mathf.Lerp(13f, 106f, t), -13f);
-        Color walkColor = Color.Lerp(Ink, Dim, t);
-        Color swimColor = Color.Lerp(Dim, Ink, t);
-        walkIcon.color = walkLabel.color = walkColor;
-        swimIcon.color = swimLabel.color = swimColor;
-
-        // The keycap sits pressed onto its shadow for as long as the swim key is held.
-        keycap.anchoredPosition = new Vector2(keycap.anchoredPosition.x, swimming ? -61f : -58f);
+        usePulse = 1f;
     }
 
-    private void BuildModeToggle()
+    private void UpdateAbilityStrip()
     {
-        modePanel = CreateRect("Mode Toggle", canvasObject.transform);
-        modePanel.anchorMin = modePanel.anchorMax = modePanel.pivot = new Vector2(0.5f, 0f);
-        modePanel.anchoredPosition = new Vector2(0f, screenMargin);
-        modePanel.sizeDelta = new Vector2(212f, 100f);
-        BuildGlassPanel(modePanel, 14, out Image glow, out Image outline);
-        glow.color = WithAlpha(Cyan, 0.3f);
-        outline.color = WithAlpha(Cyan, 0.4f);
+        tabKey.Animate(Time.unscaledDeltaTime, pressSeconds, pressedTint);
+        // The ability wheel icon lights up and clicks round a little while the wheel is open.
+        wheelImage.color = Color.Lerp(WithAlpha(Ice, 0.8f), Cyan, tabKey.Pressed);
+        wheel.localRotation = Quaternion.Euler(0f, 0f, -30f * SmoothStep01(tabKey.Pressed));
+        if (abilityWheel == null)
+            return;
 
-        Image track = AddImage(Place(CreateRect("Segmented", modePanel), 10f, 10f, 192f, 38f), RoundedSprite(10, 0f));
-        track.color = new Color(0f, 0.02f, 0.04f, 0.6f);
-
-        highlight = Place(CreateRect("Highlight", modePanel), 13f, 13f, 93f, 32f);
-        Image highlightGlow = AddImage(CreateRect("Glow", highlight), GlowSprite(8, 12));
-        highlightGlow.rectTransform.anchorMin = Vector2.zero;
-        highlightGlow.rectTransform.anchorMax = Vector2.one;
-        highlightGlow.rectTransform.offsetMin = new Vector2(-12f, -12f);
-        highlightGlow.rectTransform.offsetMax = new Vector2(12f, 12f);
-        highlightGlow.color = WithAlpha(Cyan, 0.55f);
-        AddImage(Stretch(CreateRect("Fill", highlight)), RoundedSprite(8, 0f)).color = Cyan;
-
-        BuildOption("Walk", 13f, "walk", "WALK", out walkIcon, out walkLabel);
-        BuildOption("Swim", 106f, "swim", "SWIM", out swimIcon, out swimLabel);
-
-        AddImage(Place(CreateRect("Keycap Shadow", modePanel), 27f, 61f, 64f, 28f), RoundedSprite(6, 0f)).color = KeyShadow;
-        keycap = Place(CreateRect("Keycap", modePanel), 27f, 58f, 64f, 28f);
-        AddImage(Stretch(CreateRect("Face", keycap)), RoundedSprite(6, 0f)).color = Ice;
-        AddText(Stretch(CreateRect("Key", keycap)), headingFont, 10, "SPACE", Ink, TextAnchor.MiddleCenter);
-        AddText(Place(CreateRect("Hint", modePanel), 99f, 58f, 100f, 28f), semiBoldFont, 13, "HOLD TO SWIM", Dim, TextAnchor.MiddleLeft);
-
-        modeBlend = swimController.IsSwimming ? 1f : 0f;
-    }
-
-    private void BuildOption(string name, float x, string icon, string label, out Image iconImage, out Text labelText)
-    {
-        RectTransform option = Place(CreateRect(name, modePanel), x, 13f, 93f, 32f);
-        iconImage = AddImage(Place(CreateRect("Icon", option), 12f, 7f, 18f, 18f), LoadIcon(icon));
-        labelText = AddText(Place(CreateRect("Label", option), 36f, 0f, 57f, 32f), boldFont, 14, label, Dim, TextAnchor.MiddleLeft);
-    }
-
-    // ---------- Shared building blocks ----------
-
-    private void BuildCanvas()
-    {
-        canvasObject = new GameObject("Robot HUD", typeof(Canvas), typeof(CanvasScaler));
-        Canvas canvas = canvasObject.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 10;
-        CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = referenceResolution;
-        scaler.matchWidthOrHeight = 0.5f;
-    }
-
-    /// <summary>Adds the outer glow, dark glass fill and outline that every HUD panel shares.</summary>
-    private static void BuildGlassPanel(RectTransform panel, int radius, out Image glow, out Image outline)
-    {
-        glow = AddImage(CreateRect("Glow", panel), GlowSprite(radius, (int)GlowSize));
-        glow.rectTransform.anchorMin = Vector2.zero;
-        glow.rectTransform.anchorMax = Vector2.one;
-        glow.rectTransform.offsetMin = new Vector2(-GlowSize, -GlowSize);
-        glow.rectTransform.offsetMax = new Vector2(GlowSize, GlowSize);
-        AddImage(Stretch(CreateRect("Glass", panel)), RoundedSprite(radius, 0f)).color = Glass;
-        outline = AddImage(Stretch(CreateRect("Outline", panel)), RoundedSprite(radius, 1.5f));
-    }
-
-    private static RectTransform CreateRect(string name, Transform parent)
-    {
-        GameObject child = new GameObject(name, typeof(RectTransform));
-        child.transform.SetParent(parent, false);
-        return (RectTransform)child.transform;
-    }
-
-    /// <summary>Positions a rect by its top-left corner, matching Figma's coordinates.</summary>
-    private static RectTransform Place(RectTransform rect, float x, float y, float width, float height)
-    {
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = new Vector2(x, -y);
-        rect.sizeDelta = new Vector2(width, height);
-        return rect;
-    }
-
-    private static RectTransform Stretch(RectTransform rect)
-    {
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = rect.offsetMax = Vector2.zero;
-        return rect;
-    }
-
-    private static Image AddImage(RectTransform rect, Sprite sprite)
-    {
-        Image image = rect.gameObject.AddComponent<Image>();
-        image.sprite = sprite;
-        image.type = sprite != null && sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
-        image.raycastTarget = false;
-        return image;
-    }
-
-    private static Text AddText(RectTransform rect, Font font, int size, string value, Color color, TextAnchor alignment)
-    {
-        Text text = rect.gameObject.AddComponent<Text>();
-        text.font = font;
-        text.fontSize = size;
-        text.color = color;
-        text.alignment = alignment;
-        text.horizontalOverflow = HorizontalWrapMode.Overflow;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
-        text.raycastTarget = false;
-        text.text = value;
-        return text;
-    }
-
-    private static Color WithAlpha(Color color, float alpha)
-    {
-        color.a = alpha;
-        return color;
-    }
-
-    private Font LoadFont(string fileName)
-    {
-        Font font = Resources.Load<Font>("RobotHUD/" + fileName);
-        if (font != null)
-            return font;
-        Debug.LogWarning("RobotHUD could not load font Resources/RobotHUD/" + fileName + "; using the built-in font.", this);
-        return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-    }
-
-    private Sprite LoadIcon(string iconName)
-    {
-        Texture2D texture = Resources.Load<Texture2D>("RobotHUD/icon_" + iconName);
-        if (texture == null)
+        AbilityWheel.AbilitySlot slot = abilityWheel.SelectedSlot;
+        if (slot.ability != shownAbility)
         {
-            Debug.LogWarning("RobotHUD could not load icon Resources/RobotHUD/icon_" + iconName + ".", this);
-            return null;
+            // Swap straight away when the wheel equips something new.
+            shownAbility = slot.ability;
+            abilityName.text = slot.Label;
+            abilityIcon.sprite = AbilityIcons.For(slot.ability);
+            abilityIcon.enabled = abilityIcon.sprite != null;
         }
-        return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+        IRobotAbility ability = abilityWheel.SelectedAbility;
+        bool active = ability != null && ability.IsActive;
+        string status = !slot.Usable ? "LOCKED" : ability != null ? ability.Status : "";
+        if (abilityStatus.text != status)
+            abilityStatus.text = status;
+        abilityStatus.color = !slot.Usable ? Amber : active ? Cyan : Dim;
+
+        // A quick flash when the ability fires, easing back down.
+        usePulse = Mathf.MoveTowards(usePulse, 0f, Time.unscaledDeltaTime / usePulseSeconds);
+        float flash = SmoothStep01(usePulse);
+        gem.localScale = Vector3.one * (1f + 0.15f * flash);
+        stripGlow.color = WithAlpha(Cyan, Mathf.Lerp(0.2f, 0.7f, flash));
+        stripOutline.color = WithAlpha(Cyan, Mathf.Lerp(0.45f, 1f, flash));
+        gemOutline.color = WithAlpha(Cyan, Mathf.Lerp(active ? 0.9f : 0.5f, 1f, flash));
+        abilityIcon.color = Color.Lerp(active ? Cyan : Ice, Color.white, flash);
+        // The right button lights up with the flash.
+        mouseButton.color = Color.Lerp(WithAlpha(Cyan, 0.75f), Ice, flash);
+        mouseBody.color = WithAlpha(Ice, Mathf.Lerp(0.7f, 1f, flash));
     }
 
-    // ---------- Generated sprites ----------
-    // Rounded shapes are drawn into small textures and 9-sliced, so no art assets are needed for panels.
-
-    /// <summary>A rounded rectangle; a border above zero draws only an outline of that width.</summary>
-    private static Sprite RoundedSprite(int radius, float border)
+    /// <summary>
+    /// One plate under the energy panel: pick with TAB on the left, and on the right the equipped ability (icon, name,
+    /// state) with the right-click hint to use it.
+    /// </summary>
+    private void BuildAbilityStrip(float top)
     {
-        return BuildSprite(radius * 2 + 4, radius + 2, distance => ShapeAlpha(distance, border), radius);
-    }
+        float width = abilityWheel != null ? StripWidth : StripDivider;
+        RectTransform strip = CreateCornerPanel("Ability Strip", top, width, StripHeight);
+        BuildAngularPanel(strip, 14, out stripGlow, out stripOutline);
+        stripGlow.color = WithAlpha(Cyan, 0.2f);
+        stripOutline.color = WithAlpha(Cyan, 0.45f);
 
-    /// <summary>An exact circle, drawn unsliced so it stays round at its intended size.</summary>
-    private static Sprite CircleSprite(int diameter, float border)
-    {
-        return BuildSprite(diameter, 0, distance => ShapeAlpha(distance, border), diameter / 2);
-    }
+        float keyTop = (StripHeight - 24f - KeyTravel) * 0.5f;
+        wheel = PlaceCentred(CreateRect("Ability Wheel", strip), 14f, (StripHeight - 24f) * 0.5f, 24f, 24f);
+        wheelImage = AddImage(Stretch(CreateRect("Dots", wheel)), DotRingSprite(72));
+        tabKey = new Keycap("Tab", strip, headingFont, "TAB", 9, new Vector2(44f, 24f),
+            () => abilityWheel != null ? abilityWheel.IsOpen : Keyboard.current != null && Keyboard.current.tabKey.isPressed);
+        tabKey.PlaceAt(46f, keyTop);
+        if (abilityWheel == null)
+            return;
 
-    private static float ShapeAlpha(float distance, float border)
-    {
-        float fill = Mathf.Clamp01(0.5f - distance);
-        return border > 0f ? fill * Mathf.Clamp01(distance + border + 0.5f) : fill;
-    }
+        AddImage(Place(CreateRect("Divider", strip), StripDivider, 12f, 1.5f, StripHeight - 24f), null).color = WithAlpha(Cyan, 0.25f);
 
-    /// <summary>A soft halo that fades out over the given distance outside a rounded rectangle.</summary>
-    private static Sprite GlowSprite(int radius, int spread)
-    {
-        int size = (radius + spread) * 2 + 4;
-        return BuildSprite(size, radius + spread + 2, distance =>
-        {
-            // Nothing inside the shape, so translucent panels are not tinted by their own glow.
-            if (distance < 0f)
-                return 0f;
-            float falloff = 1f - Mathf.Clamp01(distance / spread);
-            return falloff * falloff;
-        }, radius, spread);
-    }
+        // A small rhombus holding the equipped ability's icon, echoing the wheel's slots.
+        float gemLeft = StripDivider + 10f;
+        gem = PlaceCentred(CreateRect("Gem", strip), gemLeft, (StripHeight - GemSize) * 0.5f, GemSize, GemSize);
+        int gemTexture = Mathf.RoundToInt(GemSize * 2f);
+        AddImage(Stretch(CreateRect("Glass", gem)), DiamondSprite(gemTexture, 0f, 4f)).color = WithAlpha(Ink, 0.7f);
+        gemOutline = AddImage(Stretch(CreateRect("Outline", gem)), DiamondSprite(gemTexture, 3f, 4f));
+        abilityIcon = AddImage(Stretch(CreateRect("Icon", gem), -GemSize * 0.27f), null);
 
-    private static Sprite BuildSprite(int size, int sliceBorder, System.Func<float, float> alphaForDistance, int radius, int inset = 0)
-    {
-        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        texture.wrapMode = TextureWrapMode.Clamp;
-        texture.filterMode = FilterMode.Bilinear;
-        float center = size * 0.5f;
-        // The shape reaches the texture edge (less any glow spread), so sliced panels keep their exact size.
-        float halfExtent = center - inset;
-        Color32[] pixels = new Color32[size * size];
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                Vector2 p = new Vector2(Mathf.Abs(x + 0.5f - center), Mathf.Abs(y + 0.5f - center));
-                Vector2 q = p - new Vector2(halfExtent - radius, halfExtent - radius);
-                float distance = Vector2.Max(q, Vector2.zero).magnitude + Mathf.Min(Mathf.Max(q.x, q.y), 0f) - radius;
-                byte alpha = (byte)Mathf.RoundToInt(alphaForDistance(distance) * 255f);
-                pixels[y * size + x] = new Color32(255, 255, 255, alpha);
-            }
-        }
-        texture.SetPixels32(pixels);
-        texture.Apply(false, true);
-        return Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
-            SpriteMeshType.FullRect, new Vector4(sliceBorder, sliceBorder, sliceBorder, sliceBorder));
+        float textLeft = gemLeft + GemSize + 10f;
+        abilityName = AddText(Place(CreateRect("Name", strip), textLeft, 11f, 90f, 18f), headingFont, 13, "", Ice, TextAnchor.MiddleLeft);
+        abilityStatus = AddText(Place(CreateRect("Status", strip), textLeft, 31f, 90f, 14f), boldFont, 11, "", Dim, TextAnchor.MiddleLeft);
+
+        // Right click uses the ability: a mouse with its right button lit.
+        RectTransform mouse = Place(CreateRect("Right Click", strip), StripWidth - 16f - 20f, (StripHeight - 28f) * 0.5f, 20f, 28f);
+        mouseBody = AddImage(Stretch(CreateRect("Mouse", mouse)), rightClickIcon != null ? rightClickIcon : AbilityIcons.MouseBody);
+        mouseBody.preserveAspect = true;
+        mouseButton = AddImage(Stretch(CreateRect("Right Button", mouse)), AbilityIcons.MouseRightButton);
+        // A custom icon already shows its own button.
+        mouseButton.enabled = rightClickIcon == null;
+        UpdateAbilityStrip();
     }
 }

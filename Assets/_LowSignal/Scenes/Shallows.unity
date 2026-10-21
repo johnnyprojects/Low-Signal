@@ -6097,6 +6097,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 02072159609b7654d8f5a989d911a531, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScrollingTexture
+  followSeaFloorCaustics: 1
   tiling: {x: 12, y: 12}
   speed: {x: 0.004, y: 0.0025}
 --- !u!23 &1619524168
@@ -6565,7 +6566,7 @@ Terrain:
   m_StaticShadowCaster: 0
   m_IgnoreQualitySettings: 0
   m_ReflectionProbeUsage: 1
-  m_MaterialTemplate: {fileID: 2100000, guid: 594ea882c5a793440b60ff72d896021e, type: 2}
+  m_MaterialTemplate: {fileID: 2100000, guid: a4930c03e62dc4c4380df82bce9c8b62, type: 2}
   m_BakeLightProbesForTrees: 1
   m_PreserveTreePrototypeLayers: 0
   m_DeringLightProbesForTrees: 1

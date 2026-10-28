@@ -57,6 +57,12 @@ public class RobotHUD : MonoBehaviour
     [Tooltip("Seconds for the keycap to press in and spring back.")]
     [SerializeField, Min(0.01f)] private float pressSeconds = 0.08f;
 
+    [Header("Crosshair")]
+    [SerializeField] private bool showCrosshair = true;
+    [Tooltip("Diameter of the centre aiming dot in canvas reference pixels.")]
+    [SerializeField, Range(2f, 10f)] private float crosshairSize = 4f;
+    [SerializeField] private Color crosshairColor = new Color(0.9f, 0.98f, 1f, 0.9f);
+
     [Header("Layout")]
     [Tooltip("Canvas reference size. 1280x720 matches the Figma frame, so its pixel values carry over 1:1.")]
     [SerializeField] private Vector2 referenceResolution = new Vector2(1280f, 720f);
@@ -69,6 +75,10 @@ public class RobotHUD : MonoBehaviour
     private GameObject canvasObject;
     private Font headingFont;
     private Font boldFont;
+    private RectTransform crosshair;
+    private Image crosshairDot;
+    private Image crosshairOutline;
+    private Sprite crosshairSprite;
 
     private RectTransform energyPanel;
     private CanvasGroup energyCanvasGroup;
@@ -115,6 +125,7 @@ public class RobotHUD : MonoBehaviour
         boldFont = LoadFont("TitilliumWeb-Bold", this);
 
         canvasObject = CreateCanvas("Robot HUD", referenceResolution, 10);
+        BuildCrosshair();
         // The meter is skipped when the script it reports on is missing; the ability strip then takes its place.
         if (energySource != null)
             BuildEnergyMeter();
@@ -123,12 +134,15 @@ public class RobotHUD : MonoBehaviour
 
     private void OnEnable()
     {
+        UpdateCrosshair();
         if (abilityWheel != null)
             abilityWheel.AbilityUsed += OnAbilityUsed;
     }
 
     private void OnDisable()
     {
+        if (crosshair != null)
+            crosshair.gameObject.SetActive(false);
         if (abilityWheel != null)
             abilityWheel.AbilityUsed -= OnAbilityUsed;
     }
@@ -138,12 +152,40 @@ public class RobotHUD : MonoBehaviour
         if (energyPanel != null)
             UpdateEnergyMeter();
         UpdateAbilityStrip();
+        UpdateCrosshair();
     }
 
     private void OnDestroy()
     {
         if (canvasObject != null)
             Destroy(canvasObject);
+        if (crosshairSprite != null)
+        {
+            Destroy(crosshairSprite.texture);
+            Destroy(crosshairSprite);
+        }
+    }
+
+    private void BuildCrosshair()
+    {
+        crosshair = CreateRect("Crosshair", canvasObject.transform);
+        crosshair.anchorMin = crosshair.anchorMax = crosshair.pivot = new Vector2(0.5f, 0.5f);
+        crosshair.anchoredPosition = Vector2.zero;
+        crosshairSprite = CircleSprite(32, 0f);
+        // A dark edge keeps the little dot readable against bright sand as well as dark water.
+        crosshairOutline = AddImage(Stretch(CreateRect("Outline", crosshair), 1f), crosshairSprite);
+        crosshairOutline.color = new Color(0.02f, 0.05f, 0.07f, 0.8f);
+        crosshairDot = AddImage(Stretch(CreateRect("Dot", crosshair)), crosshairSprite);
+        UpdateCrosshair();
+    }
+
+    private void UpdateCrosshair()
+    {
+        if (crosshair == null) return;
+        crosshair.sizeDelta = Vector2.one * crosshairSize;
+        crosshairDot.color = crosshairColor;
+        crosshair.gameObject.SetActive(showCrosshair && Cursor.lockState == CursorLockMode.Locked &&
+            (abilityWheel == null || !abilityWheel.IsOpen));
     }
 
     /// <summary>A rect anchored and pivoted on the top-left corner of the screen, so it stays there at any resolution.</summary>

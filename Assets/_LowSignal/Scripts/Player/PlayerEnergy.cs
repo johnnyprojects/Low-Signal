@@ -74,6 +74,14 @@ public class PlayerEnergy : MonoBehaviour
             currentEnergy = Mathf.Min(MaxEnergy, currentEnergy + amount);
     }
 
+    /// <summary>Restores a saved battery level and restarts its recharge delay.</summary>
+    public void RestoreSavedEnergy(float amount)
+    {
+        currentEnergy = Mathf.Clamp(amount, 0f, MaxEnergy);
+        lastConsumptionTime = Time.time;
+        lastConsumptionFrame = Time.frameCount;
+    }
+
     private static bool IsValidAmount(float amount)
     {
         return amount >= 0f && !float.IsNaN(amount) && !float.IsInfinity(amount);

@@ -250,6 +250,7 @@ public class UnderwaterSwimController : MonoBehaviour
 
     private void Update()
     {
+        if (SaveGameService.InputBlockedThisFrame) return;
         Keyboard keyboard = Keyboard.current;
         Mouse mouse = Mouse.current;
         if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
@@ -265,6 +266,42 @@ public class UnderwaterSwimController : MonoBehaviour
             swimNeedsRepress = false;
         SetMode(swimHeld && !swimNeedsRepress ? MovementMode.Swim : MovementMode.Hover);
         SpendEnergy();
+    }
+
+    public PlayerSaveData CaptureSaveState()
+    {
+        return new PlayerSaveData
+        {
+            position = transform.position,
+            heading = bodyYaw,
+            look = new Vector2(pitch, yaw),
+            cameraDistance = followDistance,
+            energy = energySource != null ? energySource.CurrentEnergy : 0f,
+            flashlightOn = GetComponent<Flashlight>() != null && GetComponent<Flashlight>().IsOn,
+        };
+    }
+
+    public void RestoreSaveState(PlayerSaveData state)
+    {
+        moveInput = Vector3.zero;
+        SetMode(MovementMode.Hover);
+        swimNeedsRepress = true;
+        lean = leanVelocity = jetPower = bodyPitch = bodyPitchVelocity = bodyYawVelocity = 0f;
+        tiltPitch = tiltRoll = tiltPitchVelocity = tiltRollVelocity = 0f;
+        bodyYaw = state.heading;
+        body.linearVelocity = Vector3.zero;
+        body.angularVelocity = Vector3.zero;
+        body.position = state.position;
+        body.rotation = Quaternion.Euler(0f, bodyYaw, 0f);
+        transform.SetPositionAndRotation(body.position, body.rotation);
+        pitch = Mathf.Clamp(state.look.x, -pitchLimit, pitchLimit);
+        yaw = state.look.y;
+        followDistance = Mathf.Clamp(state.cameraDistance, minCameraDistance, maxCameraDistance);
+        currentCameraDistance = followDistance;
+        if (energySource != null) energySource.RestoreSavedEnergy(state.energy);
+        GetComponent<Flashlight>()?.SetOn(state.flashlightOn);
+        GetComponent<AbilityWheel>()?.RestoreSaveState(state);
+        SetJets(false);
     }
 
     /// <summary>Reads look and movement input; returns whether the swim key is held.</summary>

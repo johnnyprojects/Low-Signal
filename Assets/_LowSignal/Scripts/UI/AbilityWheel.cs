@@ -123,6 +123,7 @@ public class AbilityWheel : MonoBehaviour
 
     private void Update()
     {
+        if (SaveGameService.InputBlockedThisFrame) return;
         Keyboard keyboard = Keyboard.current;
         Mouse mouse = Mouse.current;
         bool canUse = keyboard != null && Cursor.lockState == CursorLockMode.Locked && Application.isFocused;
@@ -152,6 +153,33 @@ public class AbilityWheel : MonoBehaviour
             slowed = false;
         }
         Refresh(Time.unscaledDeltaTime);
+    }
+
+    public void CaptureSaveState(PlayerSaveData state)
+    {
+        state.selectedAbility = SelectedSlot.ability;
+        foreach (var slot in abilities)
+            if (slot.unlocked && !state.unlockedAbilities.Contains(slot.ability)) state.unlockedAbilities.Add(slot.ability);
+    }
+
+    public void RestoreSaveState(PlayerSaveData state)
+    {
+        if (IsOpen) Close(false);
+        for (int i = 0; i < abilities.Length; i++)
+        {
+            abilities[i].unlocked = state.unlockedAbilities.Contains(abilities[i].ability);
+            if (abilities[i].ability == state.selectedAbility && abilities[i].Usable) SelectedIndex = i;
+        }
+        AbilitySelected?.Invoke(SelectedSlot);
+    }
+
+    public void CloseForPause()
+    {
+        if (IsOpen) Close(false);
+        openAmount = 0f;
+        if (slowed) Time.timeScale = timeScaleBeforeOpen;
+        slowed = false;
+        Refresh(0f);
     }
 
     /// <summary>Uses the equipped ability. Locked or empty slots do nothing.</summary>

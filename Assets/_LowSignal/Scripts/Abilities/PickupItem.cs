@@ -39,6 +39,33 @@ public class PickupItem : MonoBehaviour
     internal bool CanBeginCarry => isActiveAndEnabled && canPickUp && !IsHeld &&
         GetComponentsInChildren<Rigidbody>(true).Length == 1 && GetComponentsInChildren<Joint>(true).Length == 0;
 
+    public PickupSaveData CaptureSaveState()
+    {
+        return new PickupSaveData
+        {
+            id = SaveIdentity.For(this), position = transform.position, rotation = transform.rotation,
+            active = gameObject.activeSelf, canPickUp = canPickUp, held = IsHeld,
+            isKinematic = IsHeld ? wasKinematic : GetComponent<Rigidbody>().isKinematic,
+        };
+    }
+
+    public void RestoreSaveState(PickupSaveData state)
+    {
+        SetHighlighted(false);
+        transform.SetPositionAndRotation(state.position, state.rotation);
+        var rigidbody = GetComponent<Rigidbody>();
+        rigidbody.position = state.position;
+        rigidbody.rotation = state.rotation;
+        if (!rigidbody.isKinematic)
+        {
+            rigidbody.linearVelocity = Vector3.zero;
+            rigidbody.angularVelocity = Vector3.zero;
+        }
+        rigidbody.isKinematic = state.isKinematic;
+        canPickUp = state.canPickUp;
+        gameObject.SetActive(state.active);
+    }
+
     /// <summary>Uses temporary materials; shared prefab materials are never edited.</summary>
     public void SetHighlighted(bool highlighted)
     {

@@ -54,6 +54,35 @@ public class ShallowsFishBoss : MonoBehaviour
         return true;
     }
 
+    public GuardianSaveData CaptureSaveState()
+    {
+        var state = new GuardianSaveData
+        {
+            id = SaveIdentity.For(this), phase = State, waypoint = waypoint,
+            fishPosition = fish.position, fishRotation = fish.rotation,
+        };
+        foreach (var item in accepted)
+            if (item != null) state.acceptedItems.Add(SaveIdentity.For(item));
+        return state;
+    }
+
+    public void RestoreSaveState(GuardianSaveData state)
+    {
+        accepted.Clear();
+        foreach (var item in treasures)
+        {
+            if (item == null || !state.acceptedItems.Contains(SaveIdentity.For(item))) continue;
+            accepted.Add(item);
+            item.CanPickUp = false;
+            item.GetComponent<Rigidbody>().isKinematic = true;
+        }
+        State = state.phase;
+        waypoint = Mathf.Clamp(state.waypoint, 0, swimRoute != null ? swimRoute.Length : 0);
+        fish.SetPositionAndRotation(state.fishPosition, state.fishRotation);
+        restingPosition = state.fishPosition;
+        if (passageBlocker != null) passageBlocker.enabled = !PassageOpen;
+    }
+
     void Update()
     {
         if (State != Phase.Swimming)

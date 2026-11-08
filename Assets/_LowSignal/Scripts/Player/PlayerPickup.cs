@@ -200,6 +200,14 @@ public class PlayerPickup : MonoBehaviour
         if (HeldItem == item) HeldItem = null;
     }
 
+    /// <summary>Reattaches a saved item without replaying pickup/puzzle events.</summary>
+    public bool RestoreHeldItem(PickupItem item)
+    {
+        if (HeldItem != null || item == null || !item.BeginCarry(this)) return false;
+        HeldItem = item;
+        return true;
+    }
+
     private void OnDisable()
     {
         SetHighlightedItem(null);

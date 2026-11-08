@@ -22,6 +22,10 @@ public class ShallowsCaveExit : MonoBehaviour
             return;
         }
         loading = true;
-        SceneManager.LoadSceneAsync(destinationScene);
+        if (!SaveGameService.Instance.TravelTo(destinationScene, out string error))
+        {
+            loading = false;
+            Debug.LogError(error, this);
+        }
     }
 }

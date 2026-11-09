@@ -32,7 +32,7 @@ public static class ShallowsBossValidation
             if (stage == 0)
             {
                 var boss = UnityEngine.Object.FindFirstObjectByType<ShallowsFishBoss>();
-                Require(boss != null && boss.treasures.Length == 3, "Missing boss or treasures");
+                Require(boss != null && boss.treasures.Length == 4 && boss.requiredTreasure == 4, "Missing boss or treasures");
                 CaptureFish(boss);
                 Physics.SyncTransforms();
                 Vector3 previous = boss.fish.position;
@@ -65,7 +65,7 @@ public static class ShallowsBossValidation
                     new object[] { boss.offering.position + Vector3.up * 0.3f, true });
                 Require(boss.OfferedCount == 1 && !first.CanPickUp, "Placed event failed to accept and lock treasure");
                 Require(!boss.TryAccept(first) && boss.OfferedCount == 1, "Duplicate treasure counted");
-                for (int i = 1; i < 3; i++)
+                for (int i = 1; i < boss.treasures.Length; i++)
                 {
                     boss.treasures[i].transform.position = boss.offering.position + new Vector3(i * 0.7f, 0.3f, 0);
                     boss.treasures[i].OnPlaced.Invoke();

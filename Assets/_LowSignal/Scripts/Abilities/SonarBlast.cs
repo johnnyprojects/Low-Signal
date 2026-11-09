@@ -2,15 +2,15 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Attach to the Player. The SONAR ability: using it (right click with SONAR selected on the ability wheel) sends out a
-/// pulse. For now it has no gameplay effect; it is the readout only:
+/// Attach to the Player. The SONAR BLAST ability: using it (right click with SONAR BLAST selected on the ability wheel)
+/// sends out a short, bright pulse. For now it has no gameplay effect; it is the readout only (SCANNER finds treasure):
 /// a glowing sphere bursts out from the robot in every direction and fades as it grows, and a ping plays.
 /// The sphere is drawn as a shell (Low Signal/Sonar Pulse shader), bright only at its edges, so it reads as a bubble of
 /// sound sweeping outward, and as a ring of light around the screen once it passes the camera.
 /// A short cooldown stops it being spammed.
 /// </summary>
 [DisallowMultipleComponent]
-public class Sonar : MonoBehaviour, IRobotAbility
+public class SonarBlast : MonoBehaviour, IRobotAbility
 {
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static readonly int RimPowerId = Shader.PropertyToID("_RimPower");
@@ -37,7 +37,7 @@ public class Sonar : MonoBehaviour, IRobotAbility
     private MaterialPropertyBlock properties;
     private float readyAt;
 
-    public AbilityId Id => AbilityId.Sonar;
+    public AbilityId Id => AbilityId.SonarBlast;
     public bool IsActive => Time.time < readyAt;
     public string Status => IsActive ? (readyAt - Time.time).ToString("0.0") + "s" : "READY";
 
@@ -47,7 +47,7 @@ public class Sonar : MonoBehaviour, IRobotAbility
         if (pulseMaterial == null)
         {
             Shader shader = Shader.Find("Low Signal/Sonar Pulse");
-            Debug.LogWarning("Sonar has no pulse material; re-run the editor setup to assign SonarPulse.", this);
+            Debug.LogWarning("Sonar blast has no pulse material; re-run the editor setup to assign SonarPulse.", this);
             if (shader != null)
                 pulseMaterial = new Material(shader);
         }

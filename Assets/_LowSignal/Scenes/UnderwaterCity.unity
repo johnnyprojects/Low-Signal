@@ -1296888,8 +1296888,38 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1985234300846547393, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3465090384426195791}
   m_SourcePrefab: {fileID: 100100000, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
+--- !u!1 &3465090384426195790 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1985234300846547393, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
+  m_PrefabInstance: {fileID: 3465090384426195789}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &3465090384426195791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3465090384426195790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 700a3201097b1784f8a4341cbc61a426, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Scanner
+  cooldown: 4
+  range: 45
+  sweepSpeed: 30
+  sweepColor: {r: 1, g: 0.85, b: 0.45, a: 0.5}
+  rimSharpness: 4
+  pulseMaterial: {fileID: 2100000, guid: 3700ff0cc8844507932ebf5968c1961e, type: 2}
+  glintSeconds: 4
+  glintColor: {r: 1, g: 0.78, b: 0.35, a: 1}
+  glintIntensity: 4
+  glintRange: 5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -54,6 +54,7 @@ public sealed class GuardianSaveData
     public int waypoint;
     public Vector3 fishPosition;
     public Quaternion fishRotation;
+    public bool introSeen;
     public List<string> acceptedItems = new List<string>();
 }
 

@@ -10,7 +10,7 @@ using static HudStyle;
 ///    angular style. While it is open the camera holds still and time slows, and moving the mouse points at a slot;
 ///    releasing Tab equips the highlighted ability. Locked slots are dimmed, show a padlock, and cannot be equipped.
 ///  - Right click uses the equipped ability, by calling the IRobotAbility component on the Player with the same Id
-///    (Flashlight for LIGHT, Sonar for SONAR). It does nothing while the wheel is open or if the ability is locked.
+///    (Flashlight for LIGHT, Scanner for SCANNER, SonarBlast for SONAR BLAST). It does nothing while the wheel is open or if the ability is locked.
 /// Ability names come from AbilityNames, so the slots, hub and HUD badge always match.
 /// </summary>
 [DisallowMultipleComponent]
@@ -43,10 +43,10 @@ public class AbilityWheel : MonoBehaviour
     [SerializeField] private AbilitySlot[] abilities =
     {
         new AbilitySlot { ability = AbilityId.Light, unlocked = true },
-        new AbilitySlot { ability = AbilityId.Sonar, unlocked = true },
+        new AbilitySlot { ability = AbilityId.Scanner, unlocked = true },
         new AbilitySlot { ability = AbilityId.Camo },
         new AbilitySlot { ability = AbilityId.Boost },
-        new AbilitySlot { ability = AbilityId.Scan },
+        new AbilitySlot { ability = AbilityId.SonarBlast, unlocked = true },
         new AbilitySlot { ability = AbilityId.Empty },
     };
     [Tooltip("Slot equipped at the start.")]

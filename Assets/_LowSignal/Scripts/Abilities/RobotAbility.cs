@@ -3,9 +3,11 @@ public enum AbilityId
 {
     Empty,
     Light,
-    Sonar,
+    // Was SONAR; kept at the same value so saved wheels still match.
+    Scanner,
     Camo,
-    Scan,
+    // Was SCAN; kept at the same value so saved wheels still match.
+    SonarBlast,
     Boost,
 }
 
@@ -19,9 +21,9 @@ public static class AbilityNames
         switch (id)
         {
             case AbilityId.Light: return "LIGHT";
-            case AbilityId.Sonar: return "SONAR";
+            case AbilityId.Scanner: return "SCANNER";
             case AbilityId.Camo: return "CAMO";
-            case AbilityId.Scan: return "SCAN";
+            case AbilityId.SonarBlast: return "SONAR BLAST";
             case AbilityId.Boost: return "BOOST";
             default: return "---";
         }

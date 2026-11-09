@@ -13,7 +13,6 @@ public sealed class TitleScreenController : MonoBehaviour
 {
     [Header("Appearance")]
     [SerializeField] private Sprite logo;
-    [SerializeField] private Color backgroundColor = new Color(11f / 255f, 61f / 255f, 92f / 255f);
     [Header("Start Game")]
     [SerializeField] private string startScene = "Shallows";
     [Tooltip("Enable when an intro Timeline handles starting the game instead of loading a scene.")]
@@ -24,7 +23,7 @@ public sealed class TitleScreenController : MonoBehaviour
     [SerializeField] private CanvasGroup menu;
     [SerializeField] private CanvasGroup options;
     [SerializeField] private Image logoImage;
-    [SerializeField] private Image background;
+    [SerializeField] private RawImage background;
     [SerializeField] private Button startButton;
     [SerializeField] private Button loadButton;
     [SerializeField] private Button optionsButton;
@@ -38,6 +37,7 @@ public sealed class TitleScreenController : MonoBehaviour
     private bool flicker;
     private bool starting;
     private Font font;
+    private Font bodyFont;
     private CanvasGroup newGameConfirmation;
     private Button cancelNewGame;
     private const string VolumeKey = "LowSignal.MasterVolume";
@@ -49,7 +49,6 @@ public sealed class TitleScreenController : MonoBehaviour
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        background.color = backgroundColor;
         // Respect an image assigned directly in the scene as well as the controller's logo slot.
         if (logo == null) logo = logoImage.sprite;
         SetLogo(logo);
@@ -150,8 +149,8 @@ public sealed class TitleScreenController : MonoBehaviour
     /// <summary>Reflects whether a usable save exists.</summary>
     public void SetLoadAvailable(bool available)
     {
+        // The button dims itself while it cannot be used.
         loadButton.interactable = available;
-        loadButton.GetComponentInChildren<Text>().color = available ? Color.white : new Color(0.48f, 0.61f, 0.68f);
     }
 
     private void StartGame()
@@ -196,11 +195,14 @@ public sealed class TitleScreenController : MonoBehaviour
 
     private void BuildNewGameConfirmation()
     {
-        font = Resources.Load<Font>("RobotHUD/Michroma-Regular") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        font = HudStyle.LoadFont("Michroma-Regular", this);
+        bodyFont = HudStyle.LoadFont("TitilliumWeb-SemiBold", this);
         newGameConfirmation = Group("Confirm New Game", menu.transform.parent);
-        Label("Warning", newGameConfirmation.transform, "Start a new game?\nYour saved progress will be replaced.", new Vector2(0, -100), new Vector2(1400, 120), 24);
-        var confirm = MakeButton(newGameConfirmation.transform, "Start New Game", -220);
-        cancelNewGame = MakeButton(newGameConfirmation.transform, "Cancel", -295);
+        Panel("Warning Panel", newGameConfirmation.transform, new Vector2(0, -70), new Vector2(760, 110), HudStyle.Amber);
+        Label("Warning", newGameConfirmation.transform, "START A NEW GAME?", new Vector2(0, -52), new Vector2(740, 40), 24).color = HudStyle.Amber;
+        Label("Detail", newGameConfirmation.transform, "Your saved progress will be replaced.", new Vector2(0, -92), new Vector2(740, 34), 20, bodyFont);
+        var confirm = MakeButton(newGameConfirmation.transform, "Start New Game", -182);
+        cancelNewGame = MakeButton(newGameConfirmation.transform, "Cancel", -264);
         confirm.onClick.AddListener(BeginNewGame);
         cancelNewGame.onClick.AddListener(CancelNewGame);
         Show(newGameConfirmation, false);
@@ -243,7 +245,8 @@ public sealed class TitleScreenController : MonoBehaviour
     public void BuildInterface()
     {
         if (prompt != null) return;
-        font = Resources.Load<Font>("RobotHUD/Michroma-Regular") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        font = HudStyle.LoadFont("Michroma-Regular", this);
+        bodyFont = HudStyle.LoadFont("TitilliumWeb-SemiBold", this);
         var canvasObject = new GameObject("Title Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasObject.transform.SetParent(transform, false);
         canvasObject.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
@@ -251,29 +254,33 @@ public sealed class TitleScreenController : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
-        RectTransform bg = Rect("Blue Background", canvasObject.transform, Vector2.zero, Vector2.zero);
-        bg.anchorMin = Vector2.zero;
-        bg.anchorMax = Vector2.one;
-        background = bg.gameObject.AddComponent<Image>();
-        background.color = backgroundColor;
+        RectTransform bg = HudStyle.Stretch(HudStyle.CreateRect("Backdrop", canvasObject.transform));
+        background = bg.gameObject.AddComponent<RawImage>();
         background.raycastTarget = false;
-        logoImage = Rect("Game Logo", canvasObject.transform, new Vector2(0, 75), new Vector2(800, 800)).gameObject.AddComponent<Image>();
+        bg.gameObject.AddComponent<HudBackdrop>();
+        BuildFrame(canvasObject.transform);
+        logoImage = Rect("Game Logo", canvasObject.transform, new Vector2(0, 160), new Vector2(820, 820)).gameObject.AddComponent<Image>();
         logoImage.preserveAspect = true;
         logoImage.raycastTarget = false;
         SetLogo(logo);
         prompt = Group("Press Any Key", canvasObject.transform);
-        Label("Prompt", prompt.transform, "PRESS ANY KEY TO START", new Vector2(0, -185), new Vector2(1100, 70), 26);
+        Panel("Prompt Panel", prompt.transform, new Vector2(0, -150), new Vector2(560, 64), HudStyle.WithAlpha(HudStyle.Cyan, 0.8f));
+        Label("Prompt", prompt.transform, "PRESS ANY KEY", new Vector2(0, -150), new Vector2(560, 64), 24).color = HudStyle.Cyan;
+        Diamond(prompt.transform, new Vector2(-310, -150), 14);
+        Diamond(prompt.transform, new Vector2(310, -150), 14);
         menu = Group("Main Menu", canvasObject.transform);
-        startButton = MakeButton(menu.transform, "Start Game", -100);
-        loadButton = MakeButton(menu.transform, "Load Game", -175);
+        startButton = MakeButton(menu.transform, "Start Game", -70);
+        loadButton = MakeButton(menu.transform, "Load Game", -152);
         SetLoadAvailable(false);
-        optionsButton = MakeButton(menu.transform, "Options", -250);
-        quitButton = MakeButton(menu.transform, "Quit", -325);
-        status = Label("Status", menu.transform, "", new Vector2(0, -420), new Vector2(1300, 60), 20);
+        optionsButton = MakeButton(menu.transform, "Options", -234);
+        quitButton = MakeButton(menu.transform, "Quit", -316);
+        status = Label("Status", menu.transform, "", new Vector2(0, -392), new Vector2(1300, 40), 20, bodyFont);
+        status.color = HudStyle.Amber;
         options = Group("Options", canvasObject.transform);
-        volumeButton = MakeButton(options.transform, "Volume", -100);
-        flickerButton = MakeButton(options.transform, "Prompt Flicker", -175);
-        backButton = MakeButton(options.transform, "Back", -280);
+        Label("Heading", options.transform, "OPTIONS", new Vector2(0, 10), new Vector2(800, 50), 30);
+        volumeButton = MakeButton(options.transform, "Volume", -70);
+        flickerButton = MakeButton(options.transform, "Prompt Flicker", -152);
+        backButton = MakeButton(options.transform, "Back", -256);
         Show(menu, false);
         Show(options, false);
         if (FindAnyObjectByType<EventSystem>() == null)
@@ -282,6 +289,33 @@ public sealed class TitleScreenController : MonoBehaviour
             events.transform.SetParent(transform, false);
             events.GetComponent<InputSystemUIInputModule>().AssignDefaultActions();
         }
+    }
+
+    /// <summary>Replaces the generated UI with a fresh one, keeping the logo.</summary>
+    public void RebuildInterface()
+    {
+        Transform old = transform.Find("Title Canvas");
+        if (old != null) DestroyImmediate(old.gameObject);
+        prompt = null;
+        BuildInterface();
+    }
+
+    // Cyan corner brackets, a status line and key hints frame the screen like the robot's visor.
+    private void BuildFrame(Transform canvas)
+    {
+        var frame = Group("Visor Frame", canvas);
+        Color line = HudStyle.WithAlpha(HudStyle.Cyan, 0.55f);
+        for (int corner = 0; corner < 4; corner++)
+        {
+            float sx = corner % 2 == 0 ? -1 : 1, sy = corner < 2 ? 1 : -1;
+            Vector2 tip = new Vector2(sx * 900, sy * 480);
+            Line(frame.transform, tip + new Vector2(-sx * 40, 0), new Vector2(82, 3), line);
+            Line(frame.transform, tip + new Vector2(0, -sy * 40), new Vector2(3, 82), line);
+        }
+        Label("Link Status", frame.transform, "DIVE UNIT  //  SIGNAL LINK ESTABLISHED", new Vector2(-560, 440), new Vector2(620, 30), 18, bodyFont)
+            .alignment = TextAnchor.MiddleLeft;
+        Label("Key Hints", frame.transform, "ARROWS / W S   SELECT          ENTER   CONFIRM          ESC   BACK", new Vector2(0, -440), new Vector2(1300, 30), 18, bodyFont)
+            .color = HudStyle.Dim;
     }
 
     private static RectTransform Rect(string name, Transform parent, Vector2 position, Vector2 size)
@@ -302,32 +336,63 @@ public sealed class TitleScreenController : MonoBehaviour
         return rect.gameObject.AddComponent<CanvasGroup>();
     }
 
-    private Text Label(string name, Transform parent, string value, Vector2 position, Vector2 size, int fontSize)
+    private static void Line(Transform parent, Vector2 position, Vector2 size, Color color)
+    {
+        var image = Rect("Line", parent, position, size).gameObject.AddComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+    }
+
+    private static void Diamond(Transform parent, Vector2 position, int size)
+    {
+        var image = Rect("Diamond", parent, position, new Vector2(size, size)).gameObject.AddComponent<Image>();
+        image.color = HudStyle.Cyan;
+        image.raycastTarget = false;
+        image.gameObject.AddComponent<HudShape>().Configure(HudShape.Shape.Diamond, size);
+    }
+
+    // A chamfered glass panel with a glow and outline, as on the HUD.
+    private static RectTransform Panel(string name, Transform parent, Vector2 position, Vector2 size, Color outlineColor,
+        out Image glow, out Image glass, out Image outline)
+    {
+        var rect = Rect(name, parent, position, size);
+        glow = HudStyle.AddImage(HudStyle.Stretch(HudStyle.CreateRect("Glow", rect), HudStyle.GlowSize), null);
+        glow.color = HudStyle.WithAlpha(outlineColor, 0.35f);
+        glass = HudStyle.AddImage(HudStyle.Stretch(HudStyle.CreateRect("Glass", rect)), null);
+        glass.color = HudStyle.Glass;
+        outline = HudStyle.AddImage(HudStyle.Stretch(HudStyle.CreateRect("Outline", rect)), null);
+        outline.color = outlineColor;
+        rect.gameObject.AddComponent<HudShape>().Configure(HudShape.Shape.Panel, 18);
+        return rect;
+    }
+
+    private static RectTransform Panel(string name, Transform parent, Vector2 position, Vector2 size, Color outlineColor)
+    {
+        return Panel(name, parent, position, size, outlineColor, out _, out _, out _);
+    }
+
+    private Text Label(string name, Transform parent, string value, Vector2 position, Vector2 size, int fontSize, Font labelFont = null)
     {
         var text = Rect(name, parent, position, size).gameObject.AddComponent<Text>();
-        text.font = font;
+        text.font = labelFont != null ? labelFont : font;
         text.fontSize = fontSize;
         text.alignment = TextAnchor.MiddleCenter;
         text.text = value;
-        text.color = Color.white;
+        text.color = HudStyle.Ice;
         text.raycastTarget = false;
         return text;
     }
 
     private Button MakeButton(Transform parent, string label, float y)
     {
-        var rect = Rect(label, parent, new Vector2(0, y), new Vector2(580, 62));
-        var image = rect.gameObject.AddComponent<Image>();
-        image.color = Color.white;
-        var button = rect.gameObject.AddComponent<Button>();
-        button.targetGraphic = image;
-        var colors = button.colors;
-        colors.normalColor = new Color(0.025f, 0.16f, 0.25f);
-        colors.highlightedColor = colors.selectedColor = new Color(0.13f, 0.38f, 0.51f);
-        colors.pressedColor = new Color(0.3f, 0.52f, 0.63f);
-        colors.disabledColor = new Color(0.08f, 0.19f, 0.26f, 0.3f);
-        button.colors = colors;
-        Label("Label", rect, label, Vector2.zero, rect.sizeDelta, 24);
+        var rect = Panel(label, parent, new Vector2(0, y), new Vector2(520, 64), HudStyle.Dim, out Image glow, out Image glass, out Image outline);
+        glass.raycastTarget = true;
+        var marker = Rect("Marker", rect, new Vector2(-226, 0), new Vector2(14, 14)).gameObject.AddComponent<Image>();
+        marker.raycastTarget = false;
+        marker.gameObject.AddComponent<HudShape>().Configure(HudShape.Shape.Diamond, 14);
+        var text = Label("Label", rect, label.ToUpperInvariant(), Vector2.zero, rect.sizeDelta, 22);
+        var button = rect.gameObject.AddComponent<HudMenuButton>();
+        button.Bind(glow, glass, outline, text, marker);
         return button;
     }
 }

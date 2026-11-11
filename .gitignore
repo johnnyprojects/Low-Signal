@@ -120,3 +120,5 @@ InitTestScene*.unity*
 # Recoverable local samples and retired scripts, outside Unity imports.
 /LocalArchive/
 /Previews/
+
+CITY_AUTHORING.md

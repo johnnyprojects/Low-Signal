@@ -34,7 +34,7 @@ Save files are versioned JSON at `Application.persistentDataPath/savegame.json`,
 
 City authoring tools are available under **Low Signal > City**. Surface cleanup stores unique geometry in `CitySurfaceMeshes.asset`, tracked through Git LFS, and reuses identical meshes. Do not generate a separate mesh asset for every scene object.
 
-UnderwaterCity's 65 buildings are prefab instances. Each prefab groups its static visuals into Shell, Facade, Roof, and (where present) Interior meshes. Start with [the city editing guide](CITY_AUTHORING.md) for prefab editing, variants, collisions, and team workflow. New generated city copies reuse this library.
+UnderwaterCity's 65 buildings are prefab instances. Each prefab groups its static visuals into Shell, Facade, Roof, and (where present) Interior meshes. New generated city copies reuse this library.
 
 ## Local files and samples
 

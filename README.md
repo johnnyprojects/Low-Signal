@@ -17,6 +17,7 @@ Assets/
         Editor/               City construction and repair tools
         Materials/            City materials
         Meshes/               Shared city geometry
+        Prefabs/Buildings/    Editable building prefabs and their combined mesh assets
       SeaFloor/               Seafloor models and materials
     Settings/                 Input actions and rendering settings
   Resources/RobotHUD/          Fonts and icons loaded by Resources.Load
@@ -32,6 +33,8 @@ Start from `Assets/_LowSignal/Scenes/TitleScreen.unity`. Start Game creates a fr
 Save files are versioned JSON at `Application.persistentDataPath/savegame.json`, with the previous good save at `savegame.json.bak`. `SaveGameService` starts automatically, so scenes require no new components. Use `SaveGameService.Instance.TravelTo(...)` for future area transitions to preserve the departing area's state and autosave at the destination. Scene props remain in their own area; transient motion and sonar cooldowns restart on load. Object identities currently use scene hierarchy paths, so reordering or renaming saved props can invalidate their saved state during development.
 
 City authoring tools are available under **Low Signal > City**. Surface cleanup stores unique geometry in `CitySurfaceMeshes.asset`, tracked through Git LFS, and reuses identical meshes. Do not generate a separate mesh asset for every scene object.
+
+UnderwaterCity's 65 buildings are prefab instances. Each prefab groups its static visuals into Shell, Facade, Roof, and (where present) Interior meshes. New generated city copies reuse this library.
 
 ## Local files and samples
 

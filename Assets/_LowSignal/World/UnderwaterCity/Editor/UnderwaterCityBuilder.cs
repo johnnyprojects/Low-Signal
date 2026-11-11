@@ -150,6 +150,7 @@ public static partial class UnderwaterCityBuilder
         AssetDatabase.SaveAssets();
         EditorSceneManager.SaveScene(SceneManager.GetActiveScene(),path);
         CitySurfaceCleanup.Repair();
+        ConvertBuildingsToPrefabs(true);
         EditorSceneManager.SaveScene(SceneManager.GetActiveScene(),path);
     }
 
@@ -295,8 +296,11 @@ public static partial class UnderwaterCityBuilder
 
     static void Car(Vector3 p,float yaw,int index)
     {
-        var root=Group("Wreck "+index.ToString("00"),dressing); root.position=p;
-        root.rotation=Quaternion.Euler(index%7==0?12:0,yaw,index%9==0?160:R(-5,5));
+        // All wrecks belong on the asphalt.  Banking a whole car raises one side
+        // above the roadway and made several of them appear to float.
+        if (index%9!=0) R(-5,5); // Preserve the original conditional random draw.
+        var root=Group("Wreck "+index.ToString("00"),dressing); root.position=V(p.x,CarRoadHeight,p.z);
+        root.rotation=Quaternion.Euler(0,yaw,0);
         Box("Corroded sedan body",root,V(0,.65f,0),V(2,.8f,4.5f),index%3==0?concrete:rust);
         Box("Opaque cabin",root,V(0,1.3f,-.2f),V(1.75f,.65f,2.2f),glass);
         Box("Collapsed roof",root,V(0,1.66f,-.2f),V(1.8f,.12f,2.3f),rust);
@@ -458,6 +462,51 @@ public static partial class UnderwaterCityBuilder
         File.WriteAllBytes("Previews/"+name+".png",image.EncodeToPNG());
         camera.targetTexture=null;RenderTexture.active=null;UnityEngine.Object.DestroyImmediate(image);UnityEngine.Object.DestroyImmediate(rt);
         RenderSettings.fog=fog;
+    }
+
+    const float CarRoadHeight = .175f;
+
+    [MenuItem("Low Signal/City/Repair and ground vehicle wrecks")]
+    public static void RepairVehicleWrecks()
+    {
+        if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+        RepairVehicleWrecksInScene();
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), ScenePath);
+    }
+
+    public static void RepairVehicleWrecksBatch()
+    {
+        try
+        {
+            EditorSceneManager.OpenScene(ScenePath);
+            RepairVehicleWrecksInScene();
+            EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), ScenePath);
+            EditorApplication.Exit(0);
+        }
+        catch (Exception error) { Debug.LogException(error); EditorApplication.Exit(1); }
+    }
+
+    static void RepairVehicleWrecksInScene()
+    {
+        var dressingRoot = GameObject.Find("04 - Cars, rubble and marine growth");
+        if (dressingRoot == null) throw new Exception("Missing city dressing root.");
+        int repaired = 0;
+        foreach (Transform wreck in dressingRoot.transform)
+        {
+            if (!wreck.name.StartsWith("Wreck ", StringComparison.Ordinal)) continue;
+            Undo.RecordObject(wreck, "Ground vehicle wreck");
+            float yaw = wreck.eulerAngles.y;
+            wreck.position = new Vector3(wreck.position.x, CarRoadHeight, wreck.position.z);
+            wreck.rotation = Quaternion.Euler(0, yaw, 0);
+            var wheel = wreck.Find("Buried wheel");
+            if (wheel == null) throw new Exception("Vehicle wreck has no wheels: " + wreck.name);
+            float wheelBottom = wheel.GetComponent<Collider>().bounds.min.y;
+            if (Mathf.Abs(wheelBottom - .2f) > .002f)
+                throw new Exception("Vehicle wreck is not grounded: " + wreck.name + ", wheel bottom=" + wheelBottom);
+            repaired++;
+        }
+        if (repaired != 28) throw new Exception("Expected 28 vehicle wrecks, found " + repaired);
+        Debug.Log("CITY_VEHICLES_PASS: grounded and leveled " + repaired + " vehicle wrecks on the road surface.");
     }
 }
 

@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// A permanent, non-combat distraction unlocked by placed treasure. Treasure set down inside the stone circle is
-/// locked there; once the circle holds them all, the guardian swims out to it and the passage behind it opens. After
+/// locked there (the robot places it from its PlayerInventory when in range: see Wants and TryPlaceOffering); once the circle holds them all, the guardian swims out to it and the passage behind it opens. After
 /// the intro cutscene, a HUD-style quest tracker in the top-right corner shows the objective and the treasure count.
 /// </summary>
 public class ShallowsFishBoss : MonoBehaviour
@@ -16,6 +16,10 @@ public class ShallowsFishBoss : MonoBehaviour
     public PickupItem[] treasures;
     [Min(1)] public int requiredTreasure = 4;
     [Min(0.1f)] public float offeringRadius = 3f;
+    [Tooltip("How far above or below the circle the robot can be and still place treasure from its inventory.")]
+    [Min(0.5f)] public float placementHeight = 4f;
+    [Tooltip("Treasure placed from the inventory is set out on a ring this fraction of the circle's radius from its centre.")]
+    [Range(0f, 0.9f)] public float offeringSpread = 0.4f;
     [Min(0.1f)] public float swimSpeed = 2f;
     public float turnSpeed = 90f;
     public enum Phase { Guarding, Swimming, Distracted }
@@ -67,6 +71,59 @@ public class ShallowsFishBoss : MonoBehaviour
         return true;
     }
 
+
+    // ---------- Placing from the inventory ----------
+
+    /// <summary>Whether this circle still needs the item: one of its treasures, not yet offered, while guarding.</summary>
+    public bool Wants(PickupItem item) =>
+        State == Phase.Guarding && item != null && System.Array.IndexOf(treasures, item) >= 0 && !accepted.Contains(item);
+
+    /// <summary>Distance from the circle's edge (zero anywhere inside it), including any height difference.</summary>
+    public float DistanceFromCircle(Vector3 position)
+    {
+        Vector3 offset = position - offering.position;
+        float outside = Mathf.Max(0f, new Vector2(offset.x, offset.z).magnitude - offeringRadius);
+        return new Vector2(outside, offset.y).magnitude;
+    }
+
+    /// <summary>Whether a robot at this position is close enough to place treasure in the circle.</summary>
+    public bool InPlacementRange(Vector3 position, float margin)
+    {
+        Vector3 offset = position - offering.position;
+        return new Vector2(offset.x, offset.z).magnitude <= offeringRadius + margin && Mathf.Abs(offset.y) <= placementHeight;
+    }
+
+    /// <summary>
+    /// Sets a stored treasure down in the circle and accepts it. Offerings are spaced evenly round the centre, the
+    /// first on the side facing the guardian, each resting on whatever is below its spot (the slab or the sand).
+    /// </summary>
+    public bool TryPlaceOffering(PickupItem item)
+    {
+        if (!Wants(item) || item.gameObject.activeSelf) return false;
+        Vector3 toFish = fish.position - offering.position;
+        float angle = Mathf.Atan2(toFish.z, toFish.x) + accepted.Count * Mathf.PI * 2f / Mathf.Max(1, requiredTreasure);
+        Vector3 outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+        Vector3 spot = offering.position + outward * (offeringRadius * offeringSpread);
+        spot.y = GroundBelow(spot) + 0.02f;
+        item.PlaceFromInventory(spot, Quaternion.LookRotation(-outward));
+        // The placed event normally accepts it; this covers a treasure added after Start.
+        TryAccept(item);
+        return true;
+    }
+
+    float GroundBelow(Vector3 spot)
+    {
+        float best = float.MaxValue, height = offering.position.y;
+        foreach (var hit in Physics.RaycastAll(spot + Vector3.up * 3f, Vector3.down, 8f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            // Ignore the robot and any loose items, so treasure rests on the circle itself.
+            if (hit.distance >= best || hit.collider.GetComponentInParent<UnderwaterSwimController>() != null ||
+                hit.collider.GetComponentInParent<PickupItem>() != null) continue;
+            best = hit.distance;
+            height = hit.point.y;
+        }
+        return height;
+    }
 
     public GuardianSaveData CaptureSaveState()
     {
@@ -146,7 +203,7 @@ public class ShallowsFishBoss : MonoBehaviour
         for (int i = 0; i < requiredTreasure; i++)
             hintGems[i] = HudStyle.AddImage(HudStyle.Place(HudStyle.CreateRect("Treasure " + (i + 1), panel), 18 + i * 22, 82, 14, 14), gemEmpty);
         hintTip = HudStyle.AddText(HudStyle.Place(HudStyle.CreateRect("Tip", panel), 18 + requiredTreasure * 22 + 8, 80, 300 - requiredTreasure * 22 - 26, 18),
-            body, 13, "SCANNER finds shiny treasure", HudStyle.Dim, TextAnchor.MiddleLeft);
+            body, 13, "SCANNER finds hidden items", HudStyle.Dim, TextAnchor.MiddleLeft);
     }
 
     void UpdateHint()

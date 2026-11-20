@@ -32,6 +32,8 @@ public sealed class PlayerSaveData
     public bool flashlightOn;
     public AbilityId selectedAbility;
     public List<AbilityId> unlockedAbilities = new List<AbilityId>();
+    /// <summary>SaveIdentity paths of this scene's items stored in the PlayerInventory, in pickup order.</summary>
+    public List<string> inventory = new List<string>();
 }
 
 [Serializable]

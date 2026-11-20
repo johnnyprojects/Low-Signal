@@ -216,6 +216,7 @@ public sealed class SaveGameService : MonoBehaviour
         var scene = player.gameObject.scene;
         var snapshot = new SceneSaveData { scenePath = scene.path, player = player.CaptureSaveState() };
         player.GetComponent<AbilityWheel>()?.CaptureSaveState(snapshot.player);
+        player.GetComponent<PlayerInventory>()?.CaptureSaveState(snapshot.player);
         foreach (var item in InScene<PickupItem>(scene)) snapshot.items.Add(item.CaptureSaveState());
         foreach (var guardian in InScene<ShallowsFishBoss>(scene)) snapshot.guardians.Add(guardian.CaptureSaveState());
         session.scenes.RemoveAll(s => s.scenePath == scene.path);
@@ -232,6 +233,8 @@ public sealed class SaveGameService : MonoBehaviour
             if (items.TryGetValue(itemState.id, out var item)) item.RestoreSaveState(itemState);
         foreach (var guardianState in state.guardians)
             if (guardians.TryGetValue(guardianState.id, out var guardian)) guardian.RestoreSaveState(guardianState);
+        // The inventory holds this scene's items, so it comes back whenever the scene does, not only on a load.
+        player.GetComponent<PlayerInventory>()?.RestoreSaveState(state.player, items);
         if (restorePlayer)
         {
             player.RestoreSaveState(state.player);

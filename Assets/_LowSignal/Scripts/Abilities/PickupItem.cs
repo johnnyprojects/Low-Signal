@@ -8,6 +8,10 @@ public class PickupItem : MonoBehaviour
 {
     [Tooltip("Identifier for puzzles or other systems that need to know what item this is.")]
     [SerializeField] private string itemId;
+    [Tooltip("Name shown in the inventory. When empty: the first child's name if this object has no renderer of its own (as with the guardian treasures, whose model child is named Necklace, Crown...), else this object's name.")]
+    [SerializeField] private string displayName;
+    [Tooltip("Optional inventory icon (white, tinted by the HUD). When empty the HUD draws a cut-gem glyph.")]
+    [SerializeField] private Sprite icon;
     [SerializeField] private bool canPickUp = true;
     [SerializeField] private UnityEvent onPickedUp = new UnityEvent();
     [SerializeField] private UnityEvent onPlaced = new UnityEvent();
@@ -29,6 +33,16 @@ public class PickupItem : MonoBehaviour
     private Vector3 boundsExtents;
 
     public string ItemId => itemId;
+    public Sprite Icon => icon;
+    public string DisplayName
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(displayName)) return displayName;
+            if (GetComponent<Renderer>() == null && transform.childCount > 0) return transform.GetChild(0).name;
+            return name;
+        }
+    }
     public bool CanPickUp { get => canPickUp; set => canPickUp = value; }
     public PlayerPickup Carrier { get; private set; }
     public bool IsHeld => Carrier != null;
@@ -169,6 +183,29 @@ public class PickupItem : MonoBehaviour
             body.angularVelocity = Vector3.zero;
         }
         if (placed) onPlaced.Invoke();
+    }
+
+    /// <summary>Hides the item while it sits in a PlayerInventory. Saves record it as inactive.</summary>
+    internal void StoreInInventory()
+    {
+        SetHighlighted(false);
+        gameObject.SetActive(false);
+    }
+
+    /// <summary>Brings a stored item back into the world at the given pose and fires its placed event.</summary>
+    internal void PlaceFromInventory(Vector3 position, Quaternion rotation)
+    {
+        transform.SetPositionAndRotation(position, rotation);
+        var rigidbody = GetComponent<Rigidbody>();
+        rigidbody.position = position;
+        rigidbody.rotation = rotation;
+        gameObject.SetActive(true);
+        if (!rigidbody.isKinematic)
+        {
+            rigidbody.linearVelocity = Vector3.zero;
+            rigidbody.angularVelocity = Vector3.zero;
+        }
+        onPlaced.Invoke();
     }
 
     internal void CancelCarry()

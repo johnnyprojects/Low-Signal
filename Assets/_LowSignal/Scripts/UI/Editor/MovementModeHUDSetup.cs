@@ -4,7 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// Makes sure the robot pose images in Assets/_LowSignal/Hud import as UI sprites, and that the scene's player carries a
-/// MovementModeHUD with those sprites assigned, plus the AbilityWheel and its LIGHT and SONAR abilities. Runs after scripts reload and before entering Play mode, and from
+/// MovementModeHUD with those sprites assigned, plus the AbilityWheel and its LIGHT, SCANNER and SONAR BLAST abilities. Runs after scripts reload and before entering Play mode, and from
 /// Low Signal > UI > Set up movement mode HUD.
 /// </summary>
 [InitializeOnLoad]
@@ -36,6 +36,19 @@ public static class MovementModeHUDSetup
 
     [MenuItem("Low Signal/UI/Set up movement mode HUD")]
     private static void SetUpFromMenu() => SetUp(true);
+
+    /// <summary>Runs the setup on each gameplay scene and saves it, for command-line builds.</summary>
+    public static void SetUpBatch()
+    {
+        foreach (string path in new[] { "Assets/_LowSignal/Scenes/Shallows.unity", "Assets/_LowSignal/Scenes/UnderwaterCity.unity" })
+        {
+            var scene = EditorSceneManager.OpenScene(path);
+            SetUp(true);
+            EditorSceneManager.SaveScene(scene);
+        }
+        Debug.Log("MOVEMENT_HUD_SETUP_PASS");
+        EditorApplication.Exit(0);
+    }
 
     private static void SetUp(bool fromMenu)
     {
@@ -71,16 +84,20 @@ public static class MovementModeHUDSetup
         // The Tab ability wheel and the abilities it uses live on the player too.
         changed |= EnsureComponent<AbilityWheel>(controller, "Ability wheel");
         changed |= EnsureComponent<Flashlight>(controller, "LIGHT ability");
-        changed |= EnsureComponent<Sonar>(controller, "SONAR ability");
-        SerializedObject sonar = new SerializedObject(controller.GetComponent<Sonar>());
-        SerializedProperty pulseMaterial = sonar.FindProperty("pulseMaterial");
-        if (pulseMaterial.objectReferenceValue == null)
+        changed |= EnsureComponent<Scanner>(controller, "SCANNER ability");
+        changed |= EnsureComponent<SonarBlast>(controller, "SONAR BLAST ability");
+        // Both draw their sweep with the sonar pulse shell.
+        foreach (Component ability in new Component[] { controller.GetComponent<Scanner>(), controller.GetComponent<SonarBlast>() })
         {
+            SerializedObject serialized = new SerializedObject(ability);
+            SerializedProperty pulseMaterial = serialized.FindProperty("pulseMaterial");
+            if (pulseMaterial.objectReferenceValue != null)
+                continue;
             Material pulse = AssetDatabase.LoadAssetAtPath<Material>(SonarPulseMaterialPath);
             if (pulse == null)
                 Debug.LogError($"Sonar pulse material missing: expected {SonarPulseMaterialPath}.");
             pulseMaterial.objectReferenceValue = pulse;
-            changed |= sonar.ApplyModifiedProperties();
+            changed |= serialized.ApplyModifiedProperties();
         }
 
         if (!changed)

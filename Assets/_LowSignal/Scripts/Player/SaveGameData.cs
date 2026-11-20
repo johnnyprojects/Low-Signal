@@ -32,6 +32,8 @@ public sealed class PlayerSaveData
     public bool flashlightOn;
     public AbilityId selectedAbility;
     public List<AbilityId> unlockedAbilities = new List<AbilityId>();
+    /// <summary>SaveIdentity paths of this scene's items stored in the PlayerInventory, in pickup order.</summary>
+    public List<string> inventory = new List<string>();
 }
 
 [Serializable]
@@ -54,6 +56,7 @@ public sealed class GuardianSaveData
     public int waypoint;
     public Vector3 fishPosition;
     public Quaternion fishRotation;
+    public bool introSeen;
     public List<string> acceptedItems = new List<string>();
 }
 

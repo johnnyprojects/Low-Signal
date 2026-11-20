@@ -99,6 +99,14 @@ public sealed class SaveGameStore
                 || !Enum.IsDefined(typeof(AbilityId), player.selectedAbility) || player.unlockedAbilities == null) return false;
             foreach (var ability in player.unlockedAbilities)
                 if (!Enum.IsDefined(typeof(AbilityId), ability)) return false;
+            // Saves from before the inventory have no list. Stored items are hidden, so they are saved inactive.
+            var stored = new HashSet<string>();
+            if (player.inventory != null)
+            {
+                if (player.inventory.Count > 64) return false;
+                foreach (string item in player.inventory)
+                    if (string.IsNullOrEmpty(item) || !stored.Add(item) || !scene.items.Exists(i => i.id == item && !i.held && !i.active)) return false;
+            }
             var ids = new HashSet<string>();
             int heldCount = 0;
             foreach (var item in scene.items)
@@ -113,7 +121,7 @@ public sealed class SaveGameStore
                     || boss.waypoint < 0 || !Finite(boss.fishPosition) || !Valid(boss.fishRotation) || boss.acceptedItems == null) return false;
                 var accepted = new HashSet<string>();
                 foreach (string item in boss.acceptedItems)
-                    if (string.IsNullOrEmpty(item) || !accepted.Add(item) || !scene.items.Exists(i => i.id == item && !i.held)) return false;
+                    if (string.IsNullOrEmpty(item) || !accepted.Add(item) || stored.Contains(item) || !scene.items.Exists(i => i.id == item && !i.held)) return false;
             }
         }
         return hasCurrent;

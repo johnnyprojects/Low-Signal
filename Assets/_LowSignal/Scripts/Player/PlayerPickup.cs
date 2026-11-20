@@ -2,7 +2,11 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// <summary>Look at an eligible item and press F to carry it; look at a surface and press F to place it.</summary>
+/// <summary>
+/// Look at an eligible item and press F to pick it up. With a PlayerInventory on the player, the item is stored there
+/// and F near a stone circle places the next wanted item in it (InventoryHUD draws the prompts). Without one, the item
+/// is carried and F on a surface puts it down.
+/// </summary>
 [DisallowMultipleComponent]
 public class PlayerPickup : MonoBehaviour
 {
@@ -21,6 +25,7 @@ public class PlayerPickup : MonoBehaviour
     [SerializeField] private bool showInteractionHint = true;
 
     private UnderwaterSwimController swimController;
+    private PlayerInventory inventory;
     private PickupItem highlightedItem;
     private bool canPlace;
     private GUIStyle hintStyle;
@@ -30,6 +35,10 @@ public class PlayerPickup : MonoBehaviour
     public event Action<PickupItem> ItemPickedUp;
     public event Action<PickupItem> ItemPlaced;
     public PickupItem TargetItem => highlightedItem;
+    public PlayerInventory Inventory => inventory;
+    public bool UsesInventory => inventory != null && inventory.isActiveAndEnabled;
+    public bool InteractionAvailable => InputAvailable;
+    public bool IsInteractKeyHeld => Keyboard.current != null && Keyboard.current[interactKey].isPressed;
 
     private bool InputAvailable => Time.timeScale > 0f && Application.isFocused &&
         Cursor.lockState == CursorLockMode.Locked && (swimController == null || !swimController.LookBlocked);
@@ -37,6 +46,7 @@ public class PlayerPickup : MonoBehaviour
     private void Awake()
     {
         swimController = GetComponent<UnderwaterSwimController>();
+        inventory = GetComponent<PlayerInventory>();
         if (interactionCamera == null) interactionCamera = GetComponentInChildren<Camera>();
         if (interactionCamera == null) interactionCamera = Camera.main;
     }
@@ -59,6 +69,7 @@ public class PlayerPickup : MonoBehaviour
     public bool TryInteract()
     {
         if (!isActiveAndEnabled) return false;
+        if (UsesInventory && !IsHolding) return TryInteractWithInventory();
         if (IsHolding)
         {
             if (!TryGetPlacement(out Vector3 position)) return false;
@@ -72,14 +83,35 @@ public class PlayerPickup : MonoBehaviour
         if (!TryGetTarget(out RaycastHit hit)) return false;
 
         PickupItem item = hit.collider.GetComponentInParent<PickupItem>();
-        if (item == null || item.transform.IsChildOf(transform) || transform.IsChildOf(item.transform) ||
-            !item.BeginCarry(this)) return false;
+        if (!IsOtherItem(item) || !item.BeginCarry(this)) return false;
         HeldItem = item;
         SetHighlightedItem(null);
         item.OnPickedUp.Invoke();
         ItemPickedUp?.Invoke(item);
         return true;
     }
+
+    /// <summary>Stores the item in view; otherwise places the next wanted item when a stone circle is in range.</summary>
+    private bool TryInteractWithInventory()
+    {
+        if (TryGetTarget(out RaycastHit hit))
+        {
+            PickupItem item = hit.collider.GetComponentInParent<PickupItem>();
+            if (IsOtherItem(item) && inventory.TryStore(item))
+            {
+                SetHighlightedItem(null);
+                item.OnPickedUp.Invoke();
+                ItemPickedUp?.Invoke(item);
+                return true;
+            }
+        }
+        if (!inventory.TryPlaceInCircle(out PickupItem placed)) return false;
+        ItemPlaced?.Invoke(placed);
+        return true;
+    }
+
+    private bool IsOtherItem(PickupItem item) =>
+        item != null && !item.transform.IsChildOf(transform) && !transform.IsChildOf(item.transform);
 
     private bool TryGetTarget(out RaycastHit target)
     {
@@ -170,8 +202,7 @@ public class PlayerPickup : MonoBehaviour
             else if (TryGetTarget(out RaycastHit hit))
             {
                 PickupItem item = hit.collider.GetComponentInParent<PickupItem>();
-                if (item != null && item.CanBeginCarry && !item.transform.IsChildOf(transform) &&
-                    !transform.IsChildOf(item.transform)) target = item;
+                if (IsOtherItem(item) && item.CanBeginCarry) target = item;
             }
         }
         SetHighlightedItem(target);
@@ -187,7 +218,8 @@ public class PlayerPickup : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!showInteractionHint || !InputAvailable || (!IsHolding && highlightedItem == null)) return;
+        // InventoryHUD draws the prompts in the HUD's style when the inventory is in use.
+        if (!showInteractionHint || UsesInventory || !InputAvailable || (!IsHolding && highlightedItem == null)) return;
         if (hintStyle == null)
             hintStyle = new GUIStyle(GUI.skin.box) { alignment = TextAnchor.MiddleCenter, fontSize = 18 };
         string hint = IsHolding ? (canPlace ? $"[{InteractKeyName}] Place item" : "Move closer to clear ground to place item") :
@@ -203,6 +235,8 @@ public class PlayerPickup : MonoBehaviour
     /// <summary>Reattaches a saved item without replaying pickup/puzzle events.</summary>
     public bool RestoreHeldItem(PickupItem item)
     {
+        // Saves from before the inventory carried one item in hand; it goes into the inventory now.
+        if (UsesInventory) return inventory.TryStore(item);
         if (HeldItem != null || item == null || !item.BeginCarry(this)) return false;
         HeldItem = item;
         return true;

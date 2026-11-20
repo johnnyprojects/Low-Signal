@@ -77,7 +77,7 @@ public static class AbilityIcons
                     bool tip = Mathf.Abs(p.x) < 0.12f && p.y > -0.9f && p.y <= -0.78f;
                     return glass || neck || baseRing || tip;
                 };
-            case AbilityId.Sonar:
+            case AbilityId.SonarBlast:
                 // A source dot with two wave fronts spreading right.
                 return p =>
                 {
@@ -96,8 +96,8 @@ public static class AbilityIcons
                     bool slash = Mathf.Abs(p.y - p.x * 0.9f) < 0.1f && Mathf.Abs(p.x) < 0.75f;
                     return eye || pupil || slash;
                 };
-            case AbilityId.Scan:
-                // Corner brackets around a centre dot.
+            case AbilityId.Scanner:
+                // Corner brackets around a centre dot: a scanner picking out targets.
                 return p =>
                 {
                     float ax = Mathf.Abs(p.x), ay = Mathf.Abs(p.y);

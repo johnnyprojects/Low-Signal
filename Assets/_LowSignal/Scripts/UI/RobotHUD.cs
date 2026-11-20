@@ -369,6 +369,11 @@ public class RobotHUD : MonoBehaviour
 
         float textLeft = gemLeft + GemSize + 10f;
         abilityName = AddText(Place(CreateRect("Name", strip), textLeft, 11f, 90f, 18f), headingFont, 13, "", Ice, TextAnchor.MiddleLeft);
+        // Longer names such as SONAR BLAST shrink to fit rather than running into the status.
+        abilityName.horizontalOverflow = HorizontalWrapMode.Wrap;
+        abilityName.resizeTextForBestFit = true;
+        abilityName.resizeTextMinSize = 8;
+        abilityName.resizeTextMaxSize = 13;
         abilityStatus = AddText(Place(CreateRect("Status", strip), textLeft, 31f, 90f, 14f), boldFont, 11, "", Dim, TextAnchor.MiddleLeft);
 
         // Right click uses the ability: a mouse with its right button lit.

@@ -21,9 +21,14 @@ public static class ShallowsWaterEffects
     private const string ScenePath = "Assets/_LowSignal/Scenes/Shallows.unity";
     private const string Root = "Assets/_LowSignal/World/Shallows";
     private const string GroupName = "Water Effects";
-    private const float SurfaceY = 16f;
+    // Well above the reef, so the surface and its light shafts feel distant from the swimmer.
+    private const float SurfaceY = 24f;
     // The terrain runs from -80 to 80 on both axes, centred on the origin.
     private const float AreaRadius = 70f;
+    // Far wider than the terrain; fog fades the surface out well before its edge.
+    private const float SurfaceWidth = 600f;
+    // Without caustics to follow, one ripple tile covers this much water (the original 180m surface at 12 tiles).
+    private const float RippleTileSize = 15f;
 
     static ShallowsWaterEffects()
     {
@@ -38,7 +43,7 @@ public static class ShallowsWaterEffects
         if (EditorApplication.isPlayingOrWillChangePlaymode || !scene.IsValid() || scene.path != ScenePath)
             return;
         // Only ever add them automatically once, so deleting the group by hand sticks.
-        if (FindGroup(scene) != null || EditorPrefs.GetBool(AddedKey, false))
+        if (FindGroup(scene) != null || FindSurface(scene) != null || EditorPrefs.GetBool(AddedKey, false))
             return;
         Build(scene);
         EditorPrefs.SetBool(AddedKey, true);
@@ -55,9 +60,76 @@ public static class ShallowsWaterEffects
             return;
         }
         GameObject old = FindGroup(scene);
+        // Effects moved out of their group would otherwise be left in place and doubled up.
+        if (old == null && FindSurface(scene) != null)
+        {
+            Debug.LogError("The water effects have been moved out of the " + GroupName + " group. Delete them, or move them back into it, before rebuilding.");
+            return;
+        }
         if (old != null)
             Undo.DestroyObjectImmediate(old);
         Build(scene);
+    }
+
+    [MenuItem("Low Signal/Shallows/Move water surface to its set height")]
+    private static void MoveSurfaceMenu()
+    {
+        Scene scene = SceneManager.GetActiveScene();
+        if (scene.path != ScenePath)
+        {
+            Debug.LogError("Open the Shallows scene first.");
+            return;
+        }
+        MoveSurface(scene);
+    }
+
+    public static void MoveSurfaceBatch()
+    {
+        try
+        {
+            Scene scene = EditorSceneManager.OpenScene(ScenePath);
+            MoveSurface(scene);
+            EditorSceneManager.SaveScene(scene);
+            Debug.Log("SURFACE_PASS: water surface at " + SurfaceY);
+            EditorApplication.Exit(0);
+        }
+        catch (Exception e) { Debug.LogException(e); EditorApplication.Exit(1); }
+    }
+
+    // Lifts the surface to SurfaceY wherever the effects sit, lengthening each light shaft so it still reaches as far
+    // down, and keeps an invisible ceiling just under it so the robot and camera stay in the water.
+    private static void MoveSurface(Scene scene)
+    {
+        GameObject surface = FindSurface(scene);
+        if (surface == null)
+            throw new Exception("The Shallows has no water surface.");
+        float delta = SurfaceY - surface.transform.position.y;
+        Undo.RecordObject(surface.transform, "Move water surface");
+        surface.transform.position += Vector3.up * delta;
+        foreach (GameObject root in scene.GetRootGameObjects())
+            foreach (LightShafts shafts in root.GetComponentsInChildren<LightShafts>(true))
+                foreach (Transform shaft in shafts.transform)
+                {
+                    Vector3 axis = shaft.up;
+                    float length = shaft.localScale.y, longer = length + delta / Mathf.Max(0.2f, axis.y);
+                    Vector3 top = shaft.position + axis * (length * 0.5f) + Vector3.up * delta;
+                    Undo.RecordObject(shaft, "Move water surface");
+                    shaft.localScale = new Vector3(shaft.localScale.x, longer, shaft.localScale.z);
+                    shaft.position = top - axis * (longer * 0.5f);
+                }
+        Transform parent = surface.transform.parent;
+        Transform ceiling = parent != null ? parent.Find("Surface limit (invisible)") : null;
+        if (ceiling == null)
+        {
+            ceiling = new GameObject("Surface limit (invisible)").transform;
+            ceiling.SetParent(parent, false);
+            Undo.RegisterCreatedObjectUndo(ceiling.gameObject, "Move water surface");
+            ceiling.gameObject.AddComponent<BoxCollider>().size = new Vector3(SurfaceWidth, 1f, SurfaceWidth);
+            ceiling.gameObject.isStatic = true;
+        }
+        Undo.RecordObject(ceiling, "Move water surface");
+        ceiling.position = new Vector3(surface.transform.position.x, SurfaceY - 0.5f, surface.transform.position.z);
+        EditorSceneManager.MarkSceneDirty(scene);
     }
 
     private static GameObject FindGroup(Scene scene)
@@ -65,6 +137,16 @@ public static class ShallowsWaterEffects
         foreach (GameObject root in scene.GetRootGameObjects())
             if (root.name == GroupName)
                 return root;
+        return null;
+    }
+
+    // The surface wherever it sits in the hierarchy, so effects moved into another group still count as present.
+    private static GameObject FindSurface(Scene scene)
+    {
+        foreach (GameObject root in scene.GetRootGameObjects())
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t.name == "Water Surface")
+                    return t.gameObject;
         return null;
     }
 
@@ -109,13 +191,40 @@ public static class ShallowsWaterEffects
         surface.transform.SetParent(group, false);
         // Flipped to face down, toward the reef below.
         surface.transform.SetPositionAndRotation(new Vector3(0f, SurfaceY, 0f), Quaternion.Euler(180f, 0f, 0f));
-        surface.transform.localScale = new Vector3(18f, 1f, 18f);
         MeshRenderer renderer = surface.GetComponent<MeshRenderer>();
         renderer.sharedMaterial = material;
         // The surface must never shade the reef from the sun.
         renderer.shadowCastingMode = ShadowCastingMode.Off;
         renderer.receiveShadows = false;
         surface.AddComponent<ScrollingTexture>();
+        SizeSurface(surface);
+    }
+
+    [MenuItem("Low Signal/Shallows/Extend water surface")]
+    private static void ExtendSurface()
+    {
+        GameObject surface = GameObject.Find("Water Surface");
+        if (surface == null)
+        {
+            Debug.LogError("Open the Shallows scene with its water effects first.");
+            return;
+        }
+        Undo.RecordObject(surface.transform, "Extend water surface");
+        SizeSurface(surface);
+        EditorSceneManager.MarkSceneDirty(surface.scene);
+    }
+
+    // Stretches the surface far past the reef so the fog hides its rim, keeping the ripples the same size.
+    private static void SizeSurface(GameObject surface)
+    {
+        // The plane primitive is 10m across before scaling.
+        surface.transform.localScale = new Vector3(SurfaceWidth / 10f, 1f, SurfaceWidth / 10f);
+        ScrollingTexture scroller = surface.GetComponent<ScrollingTexture>();
+        if (scroller == null)
+            return;
+        SerializedObject settings = new SerializedObject(scroller);
+        settings.FindProperty("tiling").vector2Value = Vector2.one * (SurfaceWidth / RippleTileSize);
+        settings.ApplyModifiedProperties();
     }
 
     // ---------- Plankton ----------

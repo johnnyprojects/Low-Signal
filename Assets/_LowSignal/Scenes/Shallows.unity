@@ -206215,6 +206215,15 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1985234300846547393, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3465090384426195803}
+    - targetCorrespondingSourceObject: {fileID: 1985234300846547393, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3465090384426195811}
+    - targetCorrespondingSourceObject: {fileID: 1985234300846547393, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3465090384426195812}
+    - targetCorrespondingSourceObject: {fileID: 1985234300846547393, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3465090384426195813}
   m_SourcePrefab: {fileID: 100100000, guid: b6f8a44df2b9bee498758ed30e9923d2, type: 3}
 --- !u!1 &3465090384426195790 stripped
 GameObject:
@@ -206267,6 +206276,62 @@ MonoBehaviour:
   glintColor: {r: 1, g: 0.78, b: 0.35, a: 1}
   glintIntensity: 4
   glintRange: 5
+--- !u!114 &3465090384426195811
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3465090384426195790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fad236fe39c468c45bbacf692c6f5679, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
+  capacity: 6
+  placeMargin: 1.5
+  hintDistance: 14
+--- !u!114 &3465090384426195812
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3465090384426195790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c9699786dfaa594fa41d7564f3b615c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InventoryHUD
+  inventory: {fileID: 0}
+  pickup: {fileID: 0}
+  referenceResolution: {x: 1280, y: 720}
+  rowBottom: 22
+  promptBottom: 150
+  pressedTint: {r: 0.6, g: 0.95, b: 1, a: 1}
+  pressSeconds: 0.08
+  arriveSeconds: 0.5
+  fadeSeconds: 0.15
+--- !u!114 &3465090384426195813
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3465090384426195790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62827aa7d1d35e54796c8f703629bdb6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PowerFailure
+  energySource: {fileID: 0}
+  warningThreshold: 0.25
+  clearMargin: 0.02
+  fadeSeconds: 0.6
+  saturation: -100
+  vignette: 0.35
+  deathFadeSeconds: 1.2
+  deathSeconds: 3.5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

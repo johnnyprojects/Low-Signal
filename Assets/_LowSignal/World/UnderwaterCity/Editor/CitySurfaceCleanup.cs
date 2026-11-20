@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -79,6 +80,7 @@ public static class CitySurfaceCleanup
     {
         var filters = UnityEngine.Object.FindObjectsByType<MeshFilter>(FindObjectsSortMode.None)
             .Where(f => f.gameObject.scene == UnityEngine.SceneManagement.SceneManager.GetActiveScene() &&
+                !PrefabUtility.IsPartOfPrefabInstance(f) &&
                 f.sharedMesh != null && f.GetComponent<MeshRenderer>() != null && f.GetComponent<MeshRenderer>().enabled &&
                 (f.transform.root.name.StartsWith("01 -") || f.transform.root.name.StartsWith("02 -") ||
                  f.transform.root.name.StartsWith("03 -") || f.transform.root.name.StartsWith("04 -") ||
@@ -180,7 +182,7 @@ public static class CitySurfaceCleanup
             mesh.SetVertices(vertices); mesh.SetUVs(0, uvs); mesh.SetNormals(normals); mesh.subMeshCount = indices.Length;
             for (int s = 0; s < indices.Length; s++) mesh.SetTriangles(indices[s], s);
             mesh.RecalculateBounds(); mesh.RecalculateTangents();
-            mesh = CitySurfaceMeshLibrary.Store(mesh);
+            mesh = MeshLibrary.Store(mesh);
             if (undo) Undo.RecordObject(filter, "Remove overlapping city surfaces");
             filter.sharedMesh = mesh; EditorUtility.SetDirty(filter);
             report.Add(PathOf(filter.transform));
@@ -212,5 +214,68 @@ public static class CitySurfaceCleanup
             EditorApplication.Exit(0);
         }
         catch (Exception e) { Debug.LogException(e); EditorApplication.Exit(1); }
+    }
+
+    // This asset cache is only used by the cleanup pass, so keep it beside the pass.
+    static class MeshLibrary
+    {
+        const string AssetPath = "Assets/_LowSignal/World/UnderwaterCity/Meshes/CitySurfaceMeshes.asset";
+        static Dictionary<string, Mesh> meshes;
+
+        static string Fingerprint(Mesh mesh)
+        {
+            using (var stream = new MemoryStream())
+            using (var writer = new BinaryWriter(stream))
+            {
+                writer.Write((int)mesh.indexFormat);
+                var vertices = mesh.vertices;
+                writer.Write(vertices.Length);
+                foreach (var v in vertices) { writer.Write(v.x); writer.Write(v.y); writer.Write(v.z); }
+                var normals = mesh.normals;
+                writer.Write(normals.Length);
+                foreach (var v in normals) { writer.Write(v.x); writer.Write(v.y); writer.Write(v.z); }
+                var tangents = mesh.tangents;
+                writer.Write(tangents.Length);
+                foreach (var v in tangents) { writer.Write(v.x); writer.Write(v.y); writer.Write(v.z); writer.Write(v.w); }
+                var uv = mesh.uv;
+                writer.Write(uv.Length);
+                foreach (var v in uv) { writer.Write(v.x); writer.Write(v.y); }
+                writer.Write(mesh.subMeshCount);
+                for (int i = 0; i < mesh.subMeshCount; i++)
+                {
+                    writer.Write((int)mesh.GetTopology(i));
+                    var indices = mesh.GetIndices(i);
+                    writer.Write(indices.Length);
+                    foreach (int index in indices) writer.Write(index);
+                }
+                var bounds = mesh.bounds;
+                writer.Write(bounds.center.x); writer.Write(bounds.center.y); writer.Write(bounds.center.z);
+                writer.Write(bounds.extents.x); writer.Write(bounds.extents.y); writer.Write(bounds.extents.z);
+                writer.Flush();
+                using (var hash = SHA256.Create())
+                    return BitConverter.ToString(hash.ComputeHash(stream.ToArray())).Replace("-", "").ToLowerInvariant();
+            }
+        }
+
+        public static Mesh Store(Mesh mesh)
+        {
+            if (meshes == null)
+                meshes = AssetDatabase.LoadAllAssetsAtPath(AssetPath).OfType<Mesh>()
+                    .GroupBy(Fingerprint).ToDictionary(group => group.Key, group => group.First());
+
+            string fingerprint = Fingerprint(mesh);
+            if (meshes.TryGetValue(fingerprint, out var existing))
+            {
+                UnityEngine.Object.DestroyImmediate(mesh);
+                return existing;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(AssetPath));
+            mesh.name = "Surface_" + fingerprint;
+            if (File.Exists(AssetPath)) AssetDatabase.AddObjectToAsset(mesh, AssetPath);
+            else AssetDatabase.CreateAsset(mesh, AssetPath);
+            meshes.Add(fingerprint, mesh);
+            return mesh;
+        }
     }
 }

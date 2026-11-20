@@ -25,6 +25,7 @@ public static partial class UnderwaterCityBuilder
         try
         {
             EditorSceneManager.OpenScene(ScenePath);
+            RequirePrimitiveBuildings();
             buildings=GameObject.Find("02 - City blocks (sealed exteriors)").transform;
             streets=GameObject.Find("01 - Streets and seabed").transform;
             concrete=AssetDatabase.LoadAssetAtPath<Material>(Root+"/Materials/Weathered concrete.mat");
